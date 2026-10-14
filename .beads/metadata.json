@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "android_linux",
+  "project_id": "895fe8cc-24cc-40bc-b1e5-1e7a8de26661"
+}
