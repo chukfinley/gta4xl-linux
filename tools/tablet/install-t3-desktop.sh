@@ -7,10 +7,10 @@ curl -fsSLO "https://github.com/pingdotgg/t3code/releases/download/v$V/T3-Code-$
 apt-get install -y -qq --no-install-recommends "./T3-Code-$V-arm64.deb"
 rm -f "T3-Code-$V-arm64.deb"
 systemctl disable --now t3code 2>/dev/null
-rm -f /etc/systemd/system/t3code.service /usr/share/applications/t3code.desktop
+rm -f /etc/systemd/system/t3code.service
 systemctl daemon-reload
 # Wayland for touch and the on-screen keyboard
-D=$(grep -lE '^Name=T3' /usr/share/applications/*.desktop | head -1)
-[ -n "$D" ] && sed -i -E 's#^Exec=([^ ]+)#Exec=\1 --ozone-platform=wayland --enable-wayland-ime#' "$D"
+D=/usr/share/applications/t3code.desktop
+[ -n "$D" ] && sed -i -E 's#^(Exec=.*) %U#\1 --ozone-platform=wayland --enable-wayland-ime %U#' "$D"
 echo "desktop=$D"; grep -m1 '^Exec=' "$D"
 echo T3-DONE
