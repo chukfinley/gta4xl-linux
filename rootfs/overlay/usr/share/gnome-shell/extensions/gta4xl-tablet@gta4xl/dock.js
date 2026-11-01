@@ -53,7 +53,7 @@ export class DockActions {
         };
         this._monitor = {
             dragMotion: event => this._onDragMotion(event),
-            dragDrop: () => this._onDrop(),
+            dragDrop: event => this._onDrop(event),
         };
         DND.addDragMonitor(this._monitor);
         this._dragEnds = ['item-drag-end', 'item-drag-cancelled'].map(signal =>
@@ -191,9 +191,11 @@ export class DockActions {
     }
 
     // Returns CONTINUE, so the drag code ends the drag and the icon goes back to the dock
-    _onDrop() {
-        const {app, side} = this._drag ?? {};
+    _onDrop({clutterEvent}) {
+        const app = this._drag?.app;
         this._clearDrag();
+        // The last motion callback can be older than the release
+        const side = app && this._sideAt(...clutterEvent.get_coords());
         if (side)
             this._snapApp(app, side);
         return DND.DragDropResult.CONTINUE;

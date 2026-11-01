@@ -130,18 +130,19 @@ index e7bfc9a..4abdd38 100644
 +  ]
 +}
 diff --git a/windowPreview.js b/windowPreview.js
-index d27ee22..0261089 100644
+index d27ee22..e151be9 100644
 --- a/windowPreview.js
 +++ b/windowPreview.js
-@@ -351,7 +351,6 @@ class WindowPreviewMenuItem extends PopupMenu.PopupBaseMenuItem {
+@@ -351,7 +351,7 @@ class WindowPreviewMenuItem extends PopupMenu.PopupBaseMenuItem {
          const buttonLayout = Meta.prefs_get_button_layout();
          this.closeButton = new St.Button({
              style_class: 'window-close',
 -            opacity: 0,
++            opacity: this._windowCanClose() ? 255 : 0,
              x_expand: true,
              y_expand: true,
              x_align: buttonLayout.left_buttons.includes(Meta.ButtonFunction.CLOSE)
-@@ -602,17 +601,8 @@ class WindowPreviewMenuItem extends PopupMenu.PopupBaseMenuItem {
+@@ -602,17 +602,8 @@ class WindowPreviewMenuItem extends PopupMenu.PopupBaseMenuItem {
          }
      }
  
