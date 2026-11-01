@@ -1,0 +1,8 @@
+[Unit]
+Description=Clipboard history, image
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/wl-paste --type image/png --watch /usr/local/bin/tablet-clipboard-store image
+Restart=on-failure
+RestartSec=3

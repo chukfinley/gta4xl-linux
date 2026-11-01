@@ -1,0 +1,8 @@
+[Unit]
+Description=Clipboard history, text
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/wl-paste --type text --watch /usr/local/bin/tablet-clipboard-store text
+Restart=on-failure
+RestartSec=3

@@ -1,0 +1,8 @@
+[Unit]
+Description=Home client: wallpaper, Home, status bar, Dock, launcher
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=/usr/local/bin/tablet-ui-env /opt/tablet-desktop/bin/tablet-home
+Restart=on-failure
+RestartSec=2

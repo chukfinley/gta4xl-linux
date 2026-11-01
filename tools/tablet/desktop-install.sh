@@ -2,7 +2,7 @@
 # System parts of the Wayfire desktop. Run as root on the tablet, you can run it again.
 # The session files come from the overlay, see desktop-push.sh.
 export DEBIAN_FRONTEND=noninteractive
-apt-get install -y -qq --no-install-recommends alacritty wlr-randr wlopm wf-shell swaybg \
+apt-get install -y -qq --no-install-recommends alacritty wlr-randr wlopm wl-clipboard \
   fonts-inter python3-gi 2>&1 | tail -1
 # One terminal: Alacritty
 apt-get purge -y -qq gnome-terminal gnome-terminal-data gnome-console nautilus-extension-gnome-terminal 2>&1 | tail -1

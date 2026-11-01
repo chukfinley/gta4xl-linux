@@ -2,4 +2,5 @@
 Description=Tablet desktop clients
 BindsTo=graphical-session.target
 Wants=tablet-rotate.service
-Wants=tablet-tempshell.service
+Wants=tablet-home.service
+Wants=tablet-clipboard-text.service tablet-clipboard-image.service
