@@ -182,3 +182,11 @@ Debug notes:
 - Do not use `PAN_MESA_DEBUG=nocache` on kbase. A freed BO leaves the GPU MMU at once, also while a
   job runs. kbase holds no BO references, so this gives page faults that look like GPU errors.
 - Event 0x4 for each atom means that an MMU fault killed the context.
+
+## Browser and GPU
+
+GNOME Shell and Wayland clients with EGL run on Mali through `tools/tablet/panfork-system.sh`.
+Chromium (Brave, Electron): its Wayland GPU process needs a GBM device on a DRM render node.
+decon-kms has no render node, so shared images fail and the GPU process restarts in a loop
+("Cannot create bo with format=RGBA_8888"). Brave under Xwayland with ANGLE probably reset the
+tablet (no panic text). Brave and T3 Code use `--disable-gpu` until that works.

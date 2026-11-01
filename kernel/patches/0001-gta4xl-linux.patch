@@ -222,6 +222,23 @@ index badb6493b..6190672c2 100644
  	extern int drm_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
  #elif defined(CONFIG_FB)
  	extern int fb_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
+diff --git a/drivers/media/v4l2-core/v4l2-ioctl.c b/drivers/media/v4l2-core/v4l2-ioctl.c
+index f3b2bc16a..ea8576512 100644
+--- a/drivers/media/v4l2-core/v4l2-ioctl.c
++++ b/drivers/media/v4l2-core/v4l2-ioctl.c
+@@ -1358,6 +1358,12 @@ static int v4l_enum_fmt(const struct v4l2_ioctl_ops *ops,
+ 		ret = ops->vidioc_enum_fmt_meta_cap(file, fh, arg);
+ 		break;
+ 	}
++	/*
++	 * The exynos fimc-is stubs return 0 and no format for each index.
++	 * Applications that scan all nodes loop for ever without this.
++	 */
++	if (ret == 0 && !p->pixelformat)
++		ret = -EINVAL;
+ 	if (ret == 0)
+ 		v4l_fill_fmtdesc(p);
+ 	return ret;
 diff --git a/drivers/misc/samsung/scsc_bt/scsc_bluez.c b/drivers/misc/samsung/scsc_bt/scsc_bluez.c
 index 1c58f95c1..06c7b8409 100755
 --- a/drivers/misc/samsung/scsc_bt/scsc_bluez.c
@@ -1622,3 +1639,71 @@ index 6fe2787d1..0ff3ba63b 100755
    LD_VERSION=$($LD -v | head -n1 | sed 's/(compatible with [^)]*)//' \
  		      | sed 's/[[:space:]]*$//')
    printf '#define LINUX_COMPILER "%s"\n' "$CC_VERSION, $LD_VERSION"
+diff --git a/sound/core/pcm_native.c b/sound/core/pcm_native.c
+index c57d82402..273796fa2 100644
+--- a/sound/core/pcm_native.c
++++ b/sound/core/pcm_native.c
+@@ -753,7 +753,11 @@ static int snd_pcm_hw_params(struct snd_pcm_substream *substream,
+ 
+ 		if (runtime->info & SNDRV_PCM_INFO_MMAP)
+ 			size = PAGE_ALIGN(size);
+-		memset(runtime->dma_area, 0, size);
++		/*
++		 * Not memset: the ABOX dump PCMs point dma_area into device
++		 * memory, and DC ZVA there gives an alignment fault.
++		 */
++		memset_io((void __iomem *)runtime->dma_area, 0, size);
+ 	}
+ 
+ 	snd_pcm_timer_resolution_change(substream);
+diff --git a/sound/soc/samsung/abox/abox.c b/sound/soc/samsung/abox/abox.c
+index 698dd21d0..06987e614 100644
+--- a/sound/soc/samsung/abox/abox.c
++++ b/sound/soc/samsung/abox/abox.c
+@@ -5329,15 +5329,45 @@ static int abox_request_firmware(struct device *dev,
+ 	return ret;
+ }
+ 
++#define ABOX_FW_RETRY_MS	3000
++#define ABOX_FW_RETRY_MAX	100
++
++static void abox_complete_sram_firmware_request(const struct firmware *fw,
++		void *context);
++
++static void abox_fw_retry_func(struct work_struct *work)
++{
++	struct platform_device *pdev = p_abox_data->pdev;
++
++	request_firmware_nowait(THIS_MODULE,
++		FW_ACTION_HOTPLUG,
++		"calliope_sram.bin",
++		&pdev->dev,
++		GFP_KERNEL,
++		pdev,
++		abox_complete_sram_firmware_request);
++}
++
++static DECLARE_DELAYED_WORK(abox_fw_retry_work, abox_fw_retry_func);
++
+ static void abox_complete_sram_firmware_request(const struct firmware *fw,
+ 		void *context)
+ {
++	static int retries;
+ 	struct platform_device *pdev = context;
+ 	struct device *dev = &pdev->dev;
+ 	struct abox_data *data = platform_get_drvdata(pdev);
+ 
+ 	if (!fw) {
+-		dev_err(dev, "Failed to request firmware\n");
++		/*
++		 * The probe runs from the initramfs and there is no ueventd
++		 * to serve the file, so try again until the rootfs is there.
++		 */
++		if (retries++ < ABOX_FW_RETRY_MAX)
++			schedule_delayed_work(&abox_fw_retry_work,
++					msecs_to_jiffies(ABOX_FW_RETRY_MS));
++		else
++			dev_err(dev, "Failed to request firmware\n");
+ 		return;
+ 	}
+ 

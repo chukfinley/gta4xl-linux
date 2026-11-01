@@ -27,6 +27,8 @@ cat > /home/user/.config/brave-flags.conf <<'CONF'
 --enable-wayland-ime
 --touch-events=enabled
 --enable-features=TouchpadOverscrollHistoryNavigation
+--password-store=basic
+--disable-gpu
 --renderer-process-limit=3
 --disk-cache-size=104857600
 CONF
