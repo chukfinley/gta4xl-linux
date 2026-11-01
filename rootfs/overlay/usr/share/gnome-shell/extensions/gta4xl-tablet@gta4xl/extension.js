@@ -157,8 +157,9 @@ function addPinPad(dialog) {
         return;
     const entryText = () => prompt._entry.clutter_text;
     prompt._passwordEntry.clutter_text.input_hints |= Clutter.InputContentHintFlags.INHIBIT_OSK;
+    prompt._passwordEntry.hint_text = 'PIN';
 
-    const layout = new Clutter.GridLayout({column_spacing: 18, row_spacing: 18});
+    const layout = new Clutter.GridLayout({column_spacing: 14, row_spacing: 10});
     const pad = new St.Widget({
         layout_manager: layout,
         x_align: Clutter.ActorAlign.CENTER,

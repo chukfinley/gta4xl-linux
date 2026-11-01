@@ -21,12 +21,12 @@
     color: #ffffff;
 }
 
-.gta4xl-pin-pad { padding-top: 28px; }
+.gta4xl-pin-pad { padding-top: 14px; }
 .gta4xl-pin-key {
-    width: 96px;
-    height: 96px;
-    border-radius: 48px;
-    font-size: 34px;
+    width: 70px;
+    height: 70px;
+    border-radius: 35px;
+    font-size: 26px;
     color: #ffffff;
     background-color: rgba(255, 255, 255, 0.12);
 }
