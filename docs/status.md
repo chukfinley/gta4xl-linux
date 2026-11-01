@@ -29,4 +29,4 @@ User login steps are open for Signal, Jellyfin, Thunderbird and the Nextcloud ca
 
 The tablet boots into the Wayfire desktop (`~/git/tablet-desktop`, not published): `tablet-session.service`, Wayfire 0.9.0 in `/opt/wayfire`, plugin and clients in `/opt/tablet-desktop`. State and open list: `docs/status.md` in that repo.
 
-Way back to GNOME: `/usr/local/sbin/session-gnome.sh`. GNOME packages are still on disk.
+GNOME Shell, gdm and GNOME Settings are removed. GTK apps and their libraries stay. A failed session restarts, SSH over Tailscale does not depend on it.
