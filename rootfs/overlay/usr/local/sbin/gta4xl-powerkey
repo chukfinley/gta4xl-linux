@@ -51,6 +51,8 @@ def toggle(touch):
     busctl(user, bus, "set-property", *PATH, "i", value)
     # mutter wakes up on any input: a touch in the bag must not switch the panel on
     fcntl.ioctl(touch, EVIOCGRAB, 1 if value == "3" else 0)
+    if value == "3":
+        subprocess.run(["loginctl", "lock-sessions"])
 
 
 def main():

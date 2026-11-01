@@ -20,3 +20,14 @@
     border-radius: 36px;
     color: #ffffff;
 }
+
+.gta4xl-pin-pad { padding-top: 28px; }
+.gta4xl-pin-key {
+    width: 96px;
+    height: 96px;
+    border-radius: 48px;
+    font-size: 34px;
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.12);
+}
+.gta4xl-pin-key:hover, .gta4xl-pin-key:active { background-color: rgba(255, 255, 255, 0.28); }
