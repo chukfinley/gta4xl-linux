@@ -10,4 +10,5 @@ tar -C rootfs/overlay -cf - \
 for f in session-gnome session-wayfire session-confirm; do
   cat "tools/tablet/$f.sh" | tools/tab "cat > /usr/local/sbin/$f.sh; chmod 755 /usr/local/sbin/$f.sh"
 done
-tools/tab 'mkdir -p /etc/tablet-desktop; cat > /etc/tablet-desktop/wayfire.ini; systemctl daemon-reload; sync' < ../tablet-desktop/config/wayfire.ini
+# wayfire.ini names the current plugin file: tools/install-plugin.sh of tablet-desktop writes it
+tools/tab 'systemctl daemon-reload; sync'
