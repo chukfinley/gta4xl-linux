@@ -1,0 +1,3 @@
+#!/bin/sh
+# Run a command as the desktop user on the tablet, inside the GNOME session environment.
+exec "$(dirname "$0")/tab" "runuser -u user -- env XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus WAYLAND_DISPLAY=wayland-0 sh -c '$*'"

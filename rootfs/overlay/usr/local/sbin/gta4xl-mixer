@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+"""Apply an Android mixer_paths.xml route with amixer: gta4xl-mixer [--defaults] PATH [PATH ...].
+
+The ABOX DSP has no default routing. Android's audio HAL sets it from this XML, and ALSA stays
+silent until the same controls are written.
+"""
+import subprocess
+import sys
+import xml.etree.ElementTree as ET
+
+XML = "/vendor/etc/mixer_paths.xml"
+root = ET.parse(XML).getroot()
+paths = {p.get("name"): p for p in root.findall("path")}
+
+
+def expand(node, out):
+    for child in node:
+        if child.tag == "ctl":
+            out.append((child.get("name"), child.get("value"), child.get("id")))
+        elif child.tag == "path":
+            expand(paths[child.get("name")], out)
+
+
+def apply(ctls):
+    lines = []
+    for name, value, idx in ctls:
+        if value is None:
+            continue
+        ident = f"name='{name}'"
+        lines.append(f"cset {ident} '{value}'")
+    proc = subprocess.run(["amixer", "-c", "0", "-q", "-s"], input="\n".join(lines) + "\n",
+                          text=True, capture_output=True)
+    for line in proc.stderr.splitlines():
+        if "Cannot find" in line or "Invalid" in line:
+            print(line)
+
+
+def main():
+    args = sys.argv[1:]
+    ctls = []
+    if args and args[0] == "--defaults":
+        args = args[1:]
+        ctls += [(c.get("name"), c.get("value"), c.get("id")) for c in root.findall("ctl")]
+    for name in args:
+        expand(paths[name], ctls)
+    apply(ctls)
+
+
+if __name__ == "__main__":
+    main()

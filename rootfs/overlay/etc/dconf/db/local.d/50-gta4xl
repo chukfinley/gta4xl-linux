@@ -6,3 +6,20 @@ sleep-inactive-battery-type='nothing'
 
 [org/gnome/desktop/a11y/applications]
 screen-keyboard-enabled=true
+
+[org/gnome/shell]
+enabled-extensions=['gta4xl-tablet@gta4xl']
+
+[org/gnome/desktop/interface]
+gtk-theme='Yaru-dark'
+icon-theme='Yaru'
+cursor-theme='Yaru'
+color-scheme='prefer-dark'
+clock-show-weekday=true
+show-battery-percentage=true
+
+[org/gnome/desktop/wm/preferences]
+button-layout='appmenu:minimize,maximize,close'
+
+[org/gnome/mutter]
+experimental-features=['scale-monitor-framebuffer']
