@@ -1,71 +1,6 @@
-diff -ru -x build -x '*.orig' -x '*.rej' -x __pycache__ a/src/egl/drivers/dri2/platform_surfaceless.c b/src/egl/drivers/dri2/platform_surfaceless.c
---- a/src/egl/drivers/dri2/platform_surfaceless.c	2022-12-10 01:57:43.000000000 +0100
-+++ b/src/egl/drivers/dri2/platform_surfaceless.c	2026-11-01 02:57:09.926592837 +0100
-@@ -247,10 +247,15 @@
-    for (i = 0; i < num_devices; ++i) {
-       device = devices[i];
- 
--      if (!(device->available_nodes & (1 << node_type)))
-+      /* A KMS-only device has no render node, kmsro still works on it */
-+      unsigned node = node_type;
-+      if (!swrast && !(device->available_nodes & (1 << node)))
-+         node = DRM_NODE_PRIMARY;
-+
-+      if (!(device->available_nodes & (1 << node)))
-          continue;
- 
--      dri2_dpy->fd = loader_open_device(device->nodes[node_type]);
-+      dri2_dpy->fd = loader_open_device(device->nodes[node]);
-       if (dri2_dpy->fd < 0)
-          continue;
- 
-diff -ru -x build -x '*.orig' -x '*.rej' -x __pycache__ a/src/gallium/drivers/panfrost/pan_cmdstream.c b/src/gallium/drivers/panfrost/pan_cmdstream.c
---- a/src/gallium/drivers/panfrost/pan_cmdstream.c	2022-12-10 01:57:43.000000000 +0100
-+++ b/src/gallium/drivers/panfrost/pan_cmdstream.c	2026-11-01 02:11:43.838898053 +0100
-@@ -4208,8 +4208,9 @@
-         if (idvs) {
- #if PAN_ARCH >= 6
-                 tiler = pan_pool_alloc_desc(&batch->pool.base, INDEXED_VERTEX_JOB);
--#endif
-+#else
-                 unreachable("IDVS is unsupported on Midgard");
-+#endif
-         } else {
-                 vertex = pan_pool_alloc_desc_cs_v10(&batch->pool.base, COMPUTE_JOB);
-                 tiler = pan_pool_alloc_desc_cs_v10(&batch->pool.base, TILER_JOB);
-diff -ru -x build -x '*.orig' -x '*.rej' -x __pycache__ a/src/gallium/drivers/panfrost/pan_context.c b/src/gallium/drivers/panfrost/pan_context.c
---- a/src/gallium/drivers/panfrost/pan_context.c	2022-12-10 01:57:43.000000000 +0100
-+++ b/src/gallium/drivers/panfrost/pan_context.c	2026-11-01 03:09:55.849294167 +0100
-@@ -112,6 +112,12 @@
-         /* Submit all pending jobs */
-         panfrost_flush_all_batches(ctx, NULL);
- 
-+        /* JM kbase without CONFIG_MALI_DMA_FENCE puts no fence on a dma-buf,
-+         * so KMS can not wait for the GPU. Finish the frame before the buffer
-+         * goes to the display. This also limits the queue to one frame. */
-+        if (dev->kbase && dev->arch < 10 && (flags & PIPE_FLUSH_END_OF_FRAME))
-+                dev->mali.syncobj_wait(&dev->mali, ctx->syncobj_kbase);
-+
-         if (fence) {
-                 struct pipe_fence_handle *f = panfrost_fence_create(ctx);
-                 pipe->screen->fence_reference(pipe->screen, fence, NULL);
-diff -ru -x build -x '*.orig' -x '*.rej' -x __pycache__ a/src/gallium/drivers/panfrost/pan_screen.c b/src/gallium/drivers/panfrost/pan_screen.c
---- a/src/gallium/drivers/panfrost/pan_screen.c	2022-12-10 01:57:43.000000000 +0100
-+++ b/src/gallium/drivers/panfrost/pan_screen.c	2026-11-01 03:53:02.320502514 +0100
-@@ -358,7 +358,9 @@
-                 return 1;
- 
-         case PIPE_CAP_NATIVE_FENCE_FD:
--                return 1;
-+                /* kbase can not export a sync file. eglDupNativeFenceFDANDROID
-+                 * fails, and Chromium stops its GPU process for that. */
-+                return !dev->kbase;
- 
-         default:
-                 return u_pipe_screen_get_param_defaults(screen, param);
-diff -ru -x build -x '*.orig' -x '*.rej' -x __pycache__ a/src/panfrost/base/pan_vX_base.c b/src/panfrost/base/pan_vX_base.c
+diff -ru src/panfrost/base/pan_vX_base.c /opt/src/panfork/src/panfrost/base/pan_vX_base.c
 --- a/src/panfrost/base/pan_vX_base.c	2022-12-10 01:57:43.000000000 +0100
-+++ b/src/panfrost/base/pan_vX_base.c	2026-11-01 03:58:16.307260984 +0100
++++ a/src/panfrost/base/pan_vX_base.c	2026-11-01 03:58:16.307260984 +0100
 @@ -33,6 +33,7 @@
  #include <stdlib.h>
  #include <sys/ioctl.h>
@@ -182,9 +117,11 @@ diff -ru -x build -x '*.orig' -x '*.rej' -x __pycache__ a/src/panfrost/base/pan_
          };
  
          for (unsigned i = 0; i < KBASE_SLOT_COUNT; ++i)
-diff -ru -x build -x '*.orig' -x '*.rej' -x __pycache__ a/src/panfrost/lib/genxml/decode.c b/src/panfrost/lib/genxml/decode.c
+Nur in /opt/src/panfork/src/panfrost/bifrost: __pycache__.
+Nur in /opt/src/panfork/src/panfrost/bifrost/valhall: __pycache__.
+diff -ru src/panfrost/lib/genxml/decode.c /opt/src/panfork/src/panfrost/lib/genxml/decode.c
 --- a/src/panfrost/lib/genxml/decode.c	2022-12-10 01:57:43.000000000 +0100
-+++ b/src/panfrost/lib/genxml/decode.c	2026-11-01 02:19:56.992215576 +0100
++++ a/src/panfrost/lib/genxml/decode.c	2026-11-01 02:19:56.992215576 +0100
 @@ -1257,7 +1257,14 @@
  
                  /* Ensure the job is marked COMPLETE */
@@ -201,9 +138,9 @@ diff -ru -x build -x '*.orig' -x '*.rej' -x __pycache__ a/src/panfrost/lib/genxm
                          fflush(NULL);
                          abort();
                  }
-diff -ru -x build -x '*.orig' -x '*.rej' -x __pycache__ a/src/panfrost/lib/pan_bo.c b/src/panfrost/lib/pan_bo.c
+diff -ru src/panfrost/lib/pan_bo.c /opt/src/panfork/src/panfrost/lib/pan_bo.c
 --- a/src/panfrost/lib/pan_bo.c	2022-12-10 01:57:43.000000000 +0100
-+++ b/src/panfrost/lib/pan_bo.c	2026-11-01 02:51:02.229947062 +0100
++++ a/src/panfrost/lib/pan_bo.c	2026-11-01 02:51:02.229947062 +0100
 @@ -145,6 +145,12 @@
          }
  
@@ -242,9 +179,9 @@ diff -ru -x build -x '*.orig' -x '*.rej' -x __pycache__ a/src/panfrost/lib/pan_b
                  bo->gpu_access = 0;
  
          /* Let's do some cleanup in the BO cache while we hold the
-diff -ru -x build -x '*.orig' -x '*.rej' -x __pycache__ a/src/panfrost/lib/pan_cs.c b/src/panfrost/lib/pan_cs.c
+diff -ru src/panfrost/lib/pan_cs.c /opt/src/panfork/src/panfrost/lib/pan_cs.c
 --- a/src/panfrost/lib/pan_cs.c	2022-12-10 01:57:43.000000000 +0100
-+++ b/src/panfrost/lib/pan_cs.c	2026-11-01 02:29:18.954258613 +0100
++++ a/src/panfrost/lib/pan_cs.c	2026-11-01 02:29:18.954258613 +0100
 @@ -958,7 +958,7 @@
          pan_pack(out, TILER_HEAP, heap) {
                  heap.size = dev->tiler_heap->size;
@@ -265,3 +202,83 @@ diff -ru -x build -x '*.orig' -x '*.rej' -x __pycache__ a/src/panfrost/lib/pan_c
          }
  }
  #endif
+diff -ru src/gallium/drivers/panfrost/pan_cmdstream.c /opt/src/panfork/src/gallium/drivers/panfrost/pan_cmdstream.c
+--- a/src/gallium/drivers/panfrost/pan_cmdstream.c	2022-12-10 01:57:43.000000000 +0100
++++ a/src/gallium/drivers/panfrost/pan_cmdstream.c	2026-11-01 02:11:43.838898053 +0100
+@@ -4208,8 +4208,9 @@
+         if (idvs) {
+ #if PAN_ARCH >= 6
+                 tiler = pan_pool_alloc_desc(&batch->pool.base, INDEXED_VERTEX_JOB);
+-#endif
++#else
+                 unreachable("IDVS is unsupported on Midgard");
++#endif
+         } else {
+                 vertex = pan_pool_alloc_desc_cs_v10(&batch->pool.base, COMPUTE_JOB);
+                 tiler = pan_pool_alloc_desc_cs_v10(&batch->pool.base, TILER_JOB);
+diff -ru src/gallium/drivers/panfrost/pan_context.c /opt/src/panfork/src/gallium/drivers/panfrost/pan_context.c
+--- a/src/gallium/drivers/panfrost/pan_context.c	2022-12-10 01:57:43.000000000 +0100
++++ a/src/gallium/drivers/panfrost/pan_context.c	2026-11-01 03:09:55.849294167 +0100
+@@ -112,6 +112,12 @@
+         /* Submit all pending jobs */
+         panfrost_flush_all_batches(ctx, NULL);
+ 
++        /* JM kbase without CONFIG_MALI_DMA_FENCE puts no fence on a dma-buf,
++         * so KMS can not wait for the GPU. Finish the frame before the buffer
++         * goes to the display. This also limits the queue to one frame. */
++        if (dev->kbase && dev->arch < 10 && (flags & PIPE_FLUSH_END_OF_FRAME))
++                dev->mali.syncobj_wait(&dev->mali, ctx->syncobj_kbase);
++
+         if (fence) {
+                 struct pipe_fence_handle *f = panfrost_fence_create(ctx);
+                 pipe->screen->fence_reference(pipe->screen, fence, NULL);
+diff -ru src/gallium/drivers/panfrost/pan_resource.c /opt/src/panfork/src/gallium/drivers/panfrost/pan_resource.c
+--- a/src/gallium/drivers/panfrost/pan_resource.c	2022-12-10 01:57:43.000000000 +0100
++++ a/src/gallium/drivers/panfrost/pan_resource.c	2026-11-01 12:53:35.192032882 +0100
+@@ -556,6 +556,10 @@
+         struct pipe_scissor_state *damage_extent = &pres->damage.extent;
+         unsigned int i;
+ 
++        /* The frontend flushes pending damage in validate, also with no back buffer */
++        if (!res)
++                return;
++
+         /* Partial updates are implemented with a tile enable map only on v5.
+          * Later architectures have a more efficient method of implementing
+          * partial updates (frame shaders), while earlier architectures lack
+diff -ru src/gallium/drivers/panfrost/pan_screen.c /opt/src/panfork/src/gallium/drivers/panfrost/pan_screen.c
+--- a/src/gallium/drivers/panfrost/pan_screen.c	2022-12-10 01:57:43.000000000 +0100
++++ a/src/gallium/drivers/panfrost/pan_screen.c	2026-11-01 03:53:02.320502514 +0100
+@@ -358,7 +358,9 @@
+                 return 1;
+ 
+         case PIPE_CAP_NATIVE_FENCE_FD:
+-                return 1;
++                /* kbase can not export a sync file. eglDupNativeFenceFDANDROID
++                 * fails, and Chromium stops its GPU process for that. */
++                return !dev->kbase;
+ 
+         default:
+                 return u_pipe_screen_get_param_defaults(screen, param);
+diff -ru src/egl/drivers/dri2/platform_surfaceless.c /opt/src/panfork/src/egl/drivers/dri2/platform_surfaceless.c
+--- a/src/egl/drivers/dri2/platform_surfaceless.c	2022-12-10 01:57:43.000000000 +0100
++++ a/src/egl/drivers/dri2/platform_surfaceless.c	2026-11-01 02:57:09.926592837 +0100
+@@ -247,10 +247,15 @@
+    for (i = 0; i < num_devices; ++i) {
+       device = devices[i];
+ 
+-      if (!(device->available_nodes & (1 << node_type)))
++      /* A KMS-only device has no render node, kmsro still works on it */
++      unsigned node = node_type;
++      if (!swrast && !(device->available_nodes & (1 << node)))
++         node = DRM_NODE_PRIMARY;
++
++      if (!(device->available_nodes & (1 << node)))
+          continue;
+ 
+-      dri2_dpy->fd = loader_open_device(device->nodes[node_type]);
++      dri2_dpy->fd = loader_open_device(device->nodes[node]);
+       if (dri2_dpy->fd < 0)
+          continue;
+ 
+Nur in /opt/src/panfork/src/egl/generate: __pycache__.
