@@ -14,13 +14,20 @@ are not tested. You do this at your own risk.
 | Display (own DRM/KMS driver over DECON) | works, GNOME Wayland |
 | Touch | works |
 | On-screen keyboard | works |
+| Bottom edge swipe, touch resize handle, maximized windows | works, gnome-shell extension |
+| Night Light | works, shader in the extension (no gamma LUT) |
+| Power key | panel off and on, touch locked while off |
+| Battery | percent and time estimate through UPower |
+| SD card | works, ext4 on /media/sd |
+| Tailscale, Brave, T3 Code, Claude and Codex CLI | work |
 | WLAN | works |
 | Bluetooth (BlueZ, A2DP) | works, SBC codec |
 | Sensor hub, auto rotation | works |
 | Pen | detected by libinput, test open |
-| Audio | open |
-| GPU (Mali-G72) | open, software rendering |
+| Audio | Bluetooth A2DP works. Speaker route tool exists, test open |
+| GPU (Mali-G72) | Panfork clears at 600 FPS, draws still hang. GNOME runs on software rendering |
 | Suspend | does not resume, disabled |
+| Hardware video decode | open, software decode handles 1080p |
 | USB network | does not work, disabled. USB serial console works |
 
 Details and test results: [docs/gta4xl.md](docs/gta4xl.md).
@@ -47,3 +54,9 @@ The firmware comes from your own tablet. Samsung files are not part of this repo
 5. Start normally. Login: `user`, password `gta4xl`. Change it.
 
 After the first boot, new kernels install from Ubuntu with `tools/deploy-kernel.sh`.
+Run `tools/tablet/tune.sh`, `tools/tablet/install-apps.sh` and `tools/tablet/t3-service.sh` on the
+tablet as root. `tools/tablet/build-panfork.sh` builds the GPU driver on the tablet.
+
+## Publish
+
+`tools/publish-github.sh NAME` creates a private repository, add `--public` for a public one.

@@ -134,3 +134,13 @@ Fixed for JM on v6: unreachable() after the IDVS branch, heap bottom without +64
 and job sequence start, committed tiler heap.
 State: renderer is "Mali-G72 (Panfrost)", the clear scene reaches 600 FPS. Draws with shaders
 hang until hard stop (TERMINATED), buffers are then freed and the GPU page-faults at the job header.
+
+## Open points
+
+- Speaker: `gta4xl-mixer --defaults media-speaker` applies the Android route, amp is TAS2562.
+  `aplay -D hw:0,0` stays "device busy" with PipeWire stopped. Find the holder with `fuser`.
+- MFC: `ffmpeg -c:v h264_v4l2m2m` on /dev/video6 hangs. Software decode reaches 220 FPS at 1080p
+  on a simple test stream.
+- WLAN on the PC hotspot: the tablet disconnects each 25 to 60 s with deauth reason 7 at -30 dBm.
+  `gta4xl-wlan-cmd` sets SETROAMTRIGGER -90, the disconnects stay. Test on a real access point.
+- SD card speed is 20 MB/s, check the UHS mode in the dwmmc driver.
