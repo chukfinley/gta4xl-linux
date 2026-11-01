@@ -16,10 +16,10 @@ flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flat
 
 # Official ARM64 packages
 cd /var/tmp
-curl -fsSL https://api.github.com/repos/rustdesk/rustdesk/releases/latest | jq -r '.assets[].browser_download_url' | grep -E 'aarch64\.deb$' | head -1 | xargs -r curl -fsSLO
-curl -fsSL https://api.github.com/repos/mattermost/desktop/releases/latest | jq -r '.assets[].browser_download_url' | grep -E 'arm64\.deb$' | head -1 | xargs -r curl -fsSLO
-apt-get install -y -qq --no-install-recommends ./rustdesk-*.deb ./mattermost-desktop-*.deb 2>&1 | tail -1
-rm -f rustdesk-*.deb mattermost-desktop-*.deb
+curl -fsSLO "https://github.com/rustdesk/rustdesk/releases/download/1.5.0/rustdesk-1.5.0-aarch64.deb"
+curl -fsSL https://api.github.com/repos/mattermost/desktop/releases/latest | jq -r ".assets[].browser_download_url" | grep -E "_arm64\.deb$" | head -1 | xargs -r curl -fsSLO
+apt-get install -y -qq --no-install-recommends ./rustdesk*.deb ./mattermost*.deb 2>&1 | tail -1
+rm -f rustdesk*.deb mattermost*.deb
 
 # Web apps for services without an ARM64 build
 webapp() {
