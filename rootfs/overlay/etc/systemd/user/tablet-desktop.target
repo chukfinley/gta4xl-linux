@@ -1,0 +1,5 @@
+[Unit]
+Description=Tablet desktop clients
+BindsTo=graphical-session.target
+Wants=tablet-rotate.service
+Wants=tablet-tempshell.service

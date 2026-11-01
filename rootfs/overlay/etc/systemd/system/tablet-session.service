@@ -1,0 +1,27 @@
+[Unit]
+Description=Tablet desktop session on Wayfire
+After=systemd-user-sessions.service tablet-sched.service dbus.socket
+Conflicts=gdm.service getty@tty7.service
+OnFailure=tablet-session-fallback.service
+StartLimitIntervalSec=60
+StartLimitBurst=4
+
+[Service]
+User=user
+PAMName=login
+TTYPath=/dev/tty7
+TTYReset=yes
+TTYVHangup=yes
+UtmpIdentifier=tty7
+UtmpMode=user
+StandardInput=tty-fail
+StandardOutput=journal
+StandardError=journal
+Environment=XDG_SESSION_TYPE=wayland XDG_SESSION_CLASS=user XDG_SEAT=seat0 XDG_VTNR=7
+ExecStartPre=+/usr/bin/chvt 7
+ExecStart=/usr/local/bin/tablet-session
+Restart=always
+RestartSec=1
+
+[Install]
+Alias=display-manager.service

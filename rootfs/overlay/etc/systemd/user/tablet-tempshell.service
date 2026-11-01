@@ -1,0 +1,7 @@
+[Unit]
+Description=Temporary panel, until the own status bar and Dock replace it
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=/bin/sh -c 'wf-background & exec wf-panel'
+Restart=on-failure

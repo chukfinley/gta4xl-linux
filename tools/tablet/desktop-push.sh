@@ -1,0 +1,13 @@
+#!/bin/sh
+# Copy the session files from the overlay to the tablet. Run on the computer.
+cd "$(dirname "$0")/../.." || exit 1
+tar -C rootfs/overlay -cf - \
+  usr/local/bin/tablet-session usr/local/bin/tablet-session-start usr/local/bin/tablet-brightness usr/local/bin/tablet-rotate \
+  usr/local/sbin/gta4xl-powerkey \
+  etc/systemd/system/tablet-session.service etc/systemd/system/tablet-session-fallback.service \
+  etc/systemd/user/tablet-desktop.target etc/systemd/user/tablet-rotate.service etc/systemd/user/tablet-tempshell.service \
+  etc/xdg-desktop-portal/wayfire-portals.conf | tools/tab 'tar -C / --no-same-owner -xf -'
+for f in session-gnome session-wayfire session-confirm; do
+  cat "tools/tablet/$f.sh" | tools/tab "cat > /usr/local/sbin/$f.sh; chmod 755 /usr/local/sbin/$f.sh"
+done
+tools/tab 'mkdir -p /etc/tablet-desktop; cat > /etc/tablet-desktop/wayfire.ini; systemctl daemon-reload; sync' < ../tablet-desktop/config/wayfire.ini

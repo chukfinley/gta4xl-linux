@@ -31,3 +31,6 @@ WantedBy=multi-user.target
 UNIT
 systemctl daemon-reload
 systemctl enable --now tablet-sched.service
+# Brightness for the session user, written by the Control Center
+sed -i '/dvfs_min_lock$/a chmod 666 /sys/class/backlight/panel/brightness' /usr/local/sbin/tablet-sched
+/usr/local/sbin/tablet-sched

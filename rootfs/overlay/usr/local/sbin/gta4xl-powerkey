@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Short press on Power switches the panel off and on through mutter, and deep sleep follows.
+"""Short press on Power switches the panel off and on, and deep sleep follows. The target is Wayfire
+through wlr-output-power (wlopm), or mutter when GNOME runs.
 A press of LOCK_HOLD seconds or more locks the session. Nothing else locks it after the boot.
 
 logind ignores the key and gsd-power has no such action. Works on the greeter too: the greeter
@@ -67,8 +68,24 @@ def panel_on():
     return open(glob.glob("/sys/class/drm/card0-*/dpms")[0]).read().strip() == "On"
 
 
+def wayfire():
+    """Environment of the running Wayfire, for clients of the desktop."""
+    out = subprocess.run(["pgrep", "-n", "-x", "wayfire"], capture_output=True, text=True)
+    pid = out.stdout.strip()
+    if not pid:
+        return None
+    for path in glob.glob("/run/user/1000/wayland-*"):
+        if not path.endswith(".lock"):
+            return {"XDG_RUNTIME_DIR": "/run/user/1000", "WAYLAND_DISPLAY": os.path.basename(path)}
+    return None
+
+
 def set_panel(target, touch, on):
-    busctl(*target, "set-property", *PATH, "i", "0" if on else "3")
+    env = wayfire()
+    if env:
+        run_as("user", ["wlopm", "--on" if on else "--off", "*"], **env)
+    elif target:
+        busctl(*target, "set-property", *PATH, "i", "0" if on else "3")
     # mutter wakes up on any input: a touch in the bag must not switch the panel on
     try:
         fcntl.ioctl(touch, EVIOCGRAB, 0 if on else 1)
@@ -112,9 +129,7 @@ def main():
             os.read(wake_r, 64)
             resumed = time.monotonic()
             off_since = None
-            target = shell()
-            if target:
-                set_panel(target, touch, True)
+            set_panel(shell(), touch, True)
 
         if key in ready:
             data = os.read(key, EVENT.size * 16)
@@ -132,9 +147,7 @@ def main():
                         continue
                     # On release: mutter also wakes on the release, after the panel went off
                     time.sleep(0.1)
-                    target = shell()
-                    if target:
-                        set_panel(target, touch, not was_on)
+                    set_panel(shell(), touch, not was_on)
                     was_on = None
             continue
 

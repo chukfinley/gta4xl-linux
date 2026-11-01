@@ -1,0 +1,16 @@
+#!/bin/sh
+# Start the tablet desktop. tablet-session.service runs this script as user "user".
+export XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=wayfire XDG_SESSION_DESKTOP=wayfire
+export WLR_RENDERER=gles2 WLR_DRM_NO_MODIFIERS=1 LIBSEAT_BACKEND=logind
+export QT_QPA_PLATFORM=wayland QT_WAYLAND_DISABLE_WINDOWDECORATION=1 GDK_BACKEND=wayland SDL_VIDEODRIVER=wayland
+export MOZ_ENABLE_WAYLAND=1 ELECTRON_OZONE_PLATFORM_HINT=wayland
+set -a
+. /etc/environment.d/90-panfork.conf
+set +a
+PREFIX=/opt/wayfire
+if [ -x "$PREFIX/bin/wayfire" ]; then
+    export PATH="$PREFIX/bin:$PATH"
+    export WAYFIRE_PLUGIN_PATH=/opt/tablet-desktop/lib/wayfire WAYFIRE_PLUGIN_XML_PATH=/opt/tablet-desktop/share/wayfire/metadata
+    exec "$PREFIX/bin/wayfire" -c /etc/tablet-desktop/wayfire.ini
+fi
+exec /usr/bin/wayfire -c /etc/tablet-desktop/wayfire.ini

@@ -1,0 +1,6 @@
+[Unit]
+Description=Start GNOME when the tablet desktop fails four times in one minute
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'test -x /usr/sbin/gdm3 && systemctl start gdm.service'

@@ -1,0 +1,8 @@
+[Unit]
+Description=Auto rotation of the panel
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=/usr/local/bin/tablet-rotate
+Restart=on-failure
+RestartSec=3

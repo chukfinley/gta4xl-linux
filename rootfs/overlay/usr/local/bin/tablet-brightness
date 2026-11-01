@@ -1,0 +1,16 @@
+#!/usr/bin/env python3
+"""tablet-brightness [+N|-N|N]: panel brightness in percent, through sysfs. Prints the value."""
+import sys
+
+DIR = "/sys/class/backlight/panel/"
+now = int(open(DIR + "brightness").read())
+top = int(open(DIR + "max_brightness").read())
+if len(sys.argv) > 1:
+    arg = sys.argv[1]
+    pct = int(arg)
+    value = now + pct * top // 100 if arg[0] in "+-" else pct * top // 100
+    value = max(top // 50, min(top, value))
+    with open(DIR + "brightness", "w") as out:
+        out.write(str(value))
+    now = value
+print(now * 100 // top)

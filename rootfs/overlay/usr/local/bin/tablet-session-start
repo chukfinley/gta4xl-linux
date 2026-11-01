@@ -1,0 +1,7 @@
+#!/bin/sh
+# First client of the session: pass the Wayland variables on, then start the user units.
+systemctl --user unset-environment DESKTOP_SESSION GNOME_DESKTOP_SESSION_ID GNOME_SETUP_DISPLAY
+V="WAYLAND_DISPLAY WAYFIRE_SOCKET XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP XDG_SESSION_TYPE QT_QPA_PLATFORM QT_WAYLAND_DISABLE_WINDOWDECORATION GDK_BACKEND SDL_VIDEODRIVER MOZ_ENABLE_WAYLAND ELECTRON_OZONE_PLATFORM_HINT LIBGL_DRIVERS_PATH GBM_BACKENDS_PATH __EGL_VENDOR_LIBRARY_DIRS MESA_LOADER_DRIVER_OVERRIDE"
+systemctl --user import-environment $V
+dbus-update-activation-environment $V
+exec systemctl --user start tablet-desktop.target

@@ -1,0 +1,39 @@
+#!/usr/bin/env python3
+"""Follow net.hadess.SensorProxy and turn the Wayfire output. A file stops the rotation."""
+import os
+import subprocess
+
+import gi
+
+gi.require_version("Gio", "2.0")
+from gi.repository import Gio, GLib  # noqa: E402
+
+LOCK = os.path.expanduser("~/.config/tablet-desktop/rotation-lock")
+OUTPUT = "DSI-1"
+# Sensor names as in mutter: the transform is counter clockwise
+TRANSFORM = {"normal": "normal", "left-up": "90", "right-up": "270", "bottom-up": "180"}
+
+
+def apply(name):
+    target = TRANSFORM.get(name)
+    if target and not os.path.exists(LOCK):
+        subprocess.run(["wlr-randr", "--output", OUTPUT, "--transform", target], check=False)
+
+
+def changed(proxy, props, _invalid):
+    if "AccelerometerOrientation" in props.unpack():
+        apply(proxy.get_cached_property("AccelerometerOrientation").unpack())
+
+
+def main():
+    proxy = Gio.DBusProxy.new_for_bus_sync(Gio.BusType.SYSTEM, 0, None, "net.hadess.SensorProxy",
+                                           "/net/hadess/SensorProxy", "net.hadess.SensorProxy", None)
+    proxy.connect("g-properties-changed", changed)
+    proxy.call_sync("ClaimAccelerometer", None, 0, -1, None)
+    value = proxy.get_cached_property("AccelerometerOrientation")
+    if value:
+        apply(value.unpack())
+    GLib.MainLoop().run()
+
+
+main()
