@@ -4,21 +4,23 @@
 logind ignores the key and gsd-power has no such action. Works on the greeter too: the greeter
 runs on a private session bus, so the bus address comes from the gnome-shell environment.
 """
+import fcntl
 import glob
 import struct
 import subprocess
 
 KEY_POWER = 116
 EV_KEY = 1
+EVIOCGRAB = 0x40044590
 PATH = ["org.gnome.Mutter.DisplayConfig", "/org/gnome/Mutter/DisplayConfig",
         "org.gnome.Mutter.DisplayConfig", "PowerSaveMode"]
 
 
-def gpio_keys():
+def event_node(name):
     for path in glob.glob("/sys/class/input/event*/device/name"):
-        if open(path).read().strip() == "gpio_keys":
+        if open(path).read().strip() == name:
             return "/dev/input/" + path.split("/")[4]
-    raise SystemExit("gpio_keys not found")
+    raise SystemExit(f"{name} not found")
 
 
 def shell():
@@ -39,7 +41,7 @@ def busctl(user, bus, *args):
                            "busctl", "--user", *args], capture_output=True, text=True).stdout
 
 
-def toggle():
+def toggle(touch):
     target = shell()
     if not target:
         return
@@ -47,14 +49,17 @@ def toggle():
     mode = busctl(user, bus, "get-property", *PATH).split()
     value = "0" if len(mode) == 2 and mode[1] != "0" else "3"
     busctl(user, bus, "set-property", *PATH, "i", value)
+    # mutter wakes up on any input: a touch in the bag must not switch the panel on
+    fcntl.ioctl(touch, EVIOCGRAB, 1 if value == "3" else 0)
 
 
 def main():
-    with open(gpio_keys(), "rb") as dev:
+    touch = open(event_node("sec_touchscreen"), "rb")
+    with open(event_node("gpio_keys"), "rb") as dev:
         while True:
             _, _, typ, code, value = struct.unpack("qqHHi", dev.read(24))
             if typ == EV_KEY and code == KEY_POWER and value == 1:
-                toggle()
+                toggle(touch)
 
 
 if __name__ == "__main__":

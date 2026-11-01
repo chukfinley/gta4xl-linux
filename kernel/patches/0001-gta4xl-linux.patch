@@ -498,10 +498,10 @@ index 0b0b0a96e..d58c3e671 100644
  	int ret;
 diff --git a/drivers/video/fbdev/exynos/dpu20/decon_kms.c b/drivers/video/fbdev/exynos/dpu20/decon_kms.c
 new file mode 100644
-index 000000000..bc5eecf43
+index 000000000..cd99c68fa
 --- /dev/null
 +++ b/drivers/video/fbdev/exynos/dpu20/decon_kms.c
-@@ -0,0 +1,527 @@
+@@ -0,0 +1,544 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Minimal DRM/KMS front end for the Exynos DPU20 DECON fbdev driver.
@@ -512,6 +512,7 @@ index 000000000..bc5eecf43
 + * can be imported via PRIME as long as the exporter supports ion_iovmm_map.
 + */
 +
++#include <linux/backlight.h>
 +#include <linux/dma-buf.h>
 +#include <linux/ion_exynos.h>
 +#include <linux/module.h>
@@ -775,6 +776,29 @@ index 000000000..bc5eecf43
 +	spin_unlock_irq(&crtc->dev->event_lock);
 +}
 +
++/*
++ * DPMS switches the backlight only. After decon_disable the DPP never raises its frame
++ * interrupt again ("DPP[2] irq hasn't been occured"), so the display stays black.
++ */
++static void dk_backlight(bool on)
++{
++	static int saved = -1;
++	struct backlight_device *bd = backlight_device_get_by_type(BACKLIGHT_RAW);
++
++	if (!bd)
++		return;
++	mutex_lock(&bd->update_lock);
++	if (on && saved >= 0) {
++		bd->props.brightness = saved;
++		saved = -1;
++	} else if (!on && saved < 0) {
++		saved = bd->props.brightness;
++		bd->props.brightness = 0;
++	}
++	backlight_update_status(bd);
++	mutex_unlock(&bd->update_lock);
++}
++
 +static void dk_pipe_enable(struct drm_simple_display_pipe *pipe,
 +			   struct drm_crtc_state *crtc_state)
 +{
@@ -782,20 +806,13 @@ index 000000000..bc5eecf43
 +
 +	WRITE_ONCE(decon_kms_active, true);
 +	dk_scanout(dk, pipe->plane.state->fb);
++	dk_backlight(true);
 +	dk_send_event(&pipe->crtc);
 +}
 +
 +static void dk_pipe_disable(struct drm_simple_display_pipe *pipe)
 +{
-+	struct dk_device *dk = to_dk(pipe->crtc.dev);
-+	struct decon_device *decon = dk->decon;
-+	struct fb_info *info = decon->win[decon->dt.dft_win]->fbinfo;
-+
-+	if (lock_fb_info(info)) {
-+		if (decon->state != DECON_STATE_OFF)
-+			decon_kms_blank(decon, FB_BLANK_POWERDOWN);
-+		unlock_fb_info(info);
-+	}
++	dk_backlight(false);
 +	dk_send_event(&pipe->crtc);
 +}
 +
