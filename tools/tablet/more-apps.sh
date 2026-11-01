@@ -1,5 +1,5 @@
 #!/bin/bash
-# Spotify client, Thunderbird, Signal, Jellyfin and 0 A.D. Run as root. You can run it again.
+# Thunderbird, Signal, Jellyfin and 0 A.D., and with WITH_SPOTIFY=1 the Spotify web app. Run as root. You can run it again.
 # No autostart, no background service. See "More apps" in docs/gta4xl.md.
 export DEBIAN_FRONTEND=noninteractive LC_ALL=C
 
@@ -72,7 +72,8 @@ if [ ! -e /var/lib/widevine/libwidevinecdm.so ]; then
 fi
 ln -sfn /var/lib/widevine/WidevineCdm /opt/brave.com/brave/WidevineCdm
 
-# Spotify web app with its own Brave profile, app id and icon.
+# Spotify web app with its own Brave profile, app id and icon. Optional: WITH_SPOTIFY=1.
+if [ "${WITH_SPOTIFY:-0}" = 1 ]; then
 install -m 755 /dev/stdin /usr/local/bin/spotify-web <<'SH'
 #!/bin/sh
 # Spotify web player. It uses an own profile, so it runs apart from the main browser.
@@ -111,6 +112,8 @@ Type=Application
 Categories=Audio;AudioVideo;Player;
 StartupWMClass=brave-open.spotify.com__-Default
 DESKTOP
+
+fi
 
 # Calendar: gnome-calendar needs evolution-data-server and goa-daemon, this system has neither.
 # It starts, but it cannot show or add a calendar. Thunderbird has CalDAV and its own password

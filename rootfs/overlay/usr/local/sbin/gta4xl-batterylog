@@ -1,0 +1,123 @@
+#!/usr/bin/python3
+"""Log screen, sleep and charge state for akku-statistik.
+
+Writes one JSON line on each state change and each 5 minutes. A line has:
+  t  wall clock time
+  s  seconds in deep sleep since boot (CLOCK_BOOTTIME - CLOCK_MONOTONIC)
+  b  boot id
+  on screen on (1) or off (0)
+  p  charger connected (1) or not (0)
+  c  battery percent
+  st battery status from the kernel
+
+The timer uses CLOCK_MONOTONIC, so this process does not wake the tablet.
+"""
+import glob
+import json
+import os
+import time
+
+LOG = os.environ.get("BATTERY_LOG", "/var/lib/gta4xl-battery/events.jsonl")
+POLL = 15
+HEARTBEAT = 300
+MAX_BYTES = 2 * 1024 * 1024
+KEEP_BYTES = 1024 * 1024
+
+
+def read(path, default=""):
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except OSError:
+        return default
+
+
+def supply(kind):
+    for d in sorted(glob.glob("/sys/class/power_supply/*")):
+        if read(d + "/type") == kind:
+            return d
+    return None
+
+
+def battery():
+    bat = supply("Battery")
+    if not bat:
+        return 0, "Unknown"
+    return int(read(bat + "/capacity", "0") or 0), read(bat + "/status", "Unknown")
+
+
+def plugged(status):
+    if status in ("Charging", "Full", "Not charging"):
+        return 1
+    # OTG also reports online with a mouse attached, so it does not count here
+    for d in glob.glob("/sys/class/power_supply/*"):
+        if read(d + "/type") in ("Mains", "USB", "Wireless") and read(d + "/online") == "1":
+            return 1
+    return 0
+
+
+def screen_on():
+    lights = glob.glob("/sys/class/backlight/*")
+    for d in lights:
+        if read(d + "/bl_power", "0") != "0":
+            return 0
+        if read(d + "/brightness", "1") == "0":
+            return 0
+    for f in glob.glob("/sys/class/drm/card*-*/dpms"):
+        if read(f) == "Off":
+            return 0
+    return 1
+
+
+def sample(boot):
+    pct, status = battery()
+    return {
+        "t": round(time.time(), 1),
+        "s": round(time.clock_gettime(time.CLOCK_BOOTTIME) - time.clock_gettime(time.CLOCK_MONOTONIC), 1),
+        "b": boot,
+        "on": screen_on(),
+        "p": plugged(status),
+        "c": pct,
+        "st": status,
+    }
+
+
+def trim():
+    try:
+        if os.path.getsize(LOG) <= MAX_BYTES:
+            return
+        with open(LOG, "rb") as f:
+            f.seek(-KEEP_BYTES, os.SEEK_END)
+            f.readline()
+            tail = f.read()
+        with open(LOG + ".new", "wb") as f:
+            f.write(tail)
+        os.replace(LOG + ".new", LOG)
+    except OSError:
+        pass
+
+
+def append(row):
+    with open(LOG, "a") as f:
+        f.write(json.dumps(row, separators=(",", ":")) + "\n")
+        f.flush()
+
+
+def main():
+    os.makedirs(os.path.dirname(LOG), exist_ok=True)
+    trim()
+    boot = read("/proc/sys/kernel/random/boot_id")[:8]
+    last = sample(boot)
+    append(last)
+    while True:
+        time.sleep(POLL)
+        row = sample(boot)
+        changed = any(row[k] != last[k] for k in ("on", "p", "c", "st"))
+        slept = row["s"] - last["s"] > 5
+        if changed or slept or row["t"] - last["t"] >= HEARTBEAT:
+            append(row)
+            last = row
+
+
+if __name__ == "__main__":
+    main()

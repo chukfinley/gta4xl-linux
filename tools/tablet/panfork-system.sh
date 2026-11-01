@@ -9,6 +9,9 @@ case "$1" in
 enable)
     mkdir -p /etc/environment.d
     echo /opt/panfork/lib > /etc/ld.so.conf.d/00-panfork.conf
+    # Full path: apps with /usr/lib in their RPATH (Zed) would else load the Ubuntu libEGL_mesa
+    sed -i 's#"library_path" : "libEGL_mesa.so.0"#"library_path" : "/opt/panfork/lib/libEGL_mesa.so.0"#' \
+        /opt/panfork/share/glvnd/egl_vendor.d/50_mesa.json
     ldconfig
     cat > "$ENVFILE" <<'CONF'
 LIBGL_DRIVERS_PATH=/opt/panfork/lib/dri

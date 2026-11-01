@@ -477,6 +477,59 @@ stays after a new login, and the PIN pad and all gestures are gone. The unit is 
 Known crash: mutter 46.2 ends with SIGSEGV when a Wayland client dies with an open menu. It occurs
 with a normal mouse and with both extensions off. Close the menu first. See bead android-linux-8iv.
 
+## Dock
+
+Dash to Dock 110 with `tools/tablet/dash-to-dock.patch`, settings in
+`/etc/dconf/db/local.d/52-gta4xl-dock`, window actions in `dock.js` of `gta4xl-tablet`. Install:
+`tools/tablet/dock-setup.sh`, as root on the tablet, with the patch next to it, then a new login. The
+first run sets `enabled-extensions` and `favorite-apps` for `user`, because dconf defaults reach only
+keys that the user has not set. A later run keeps the pinned apps.
+
+Size: icons 44 px, each button 56 x 66 logical px (84 x 99 panel pixels), dock height 66 px. The
+strut takes these 66 px, so a maximized window stops above the dock: landscape work area 1335 x 706,
+portrait 801 x 1240. The Dash has `height-fraction` 1, it fits 13 buttons in portrait.
+
+Operation:
+- Tap on a closed app: start. Tap on a running app: focus. Tap on the focused app: minimize, or the
+  window picker if the app has more windows. The picker has a close button on each preview.
+- Long press (600 ms) or right click: pin, unpin, new window, left half, right half, quit.
+- Press 200 ms, then drag an icon to the left or right quarter of the screen: the app fills that
+  half, a closed app starts there. A preview shows the target. GNOME treats a touch that moves
+  before 200 ms as a scroll, so it starts no drag.
+- The button left of the app grid button shows all windows, the same as the bottom swipe.
+
+What the patch does:
+- `button ||= 1` in `_activate`. St.Button emits `clicked` with button 0 for a touch, and Dash to Dock
+  then took the action "skip": it only focused the window. So minimize and the picker never worked
+  by touch.
+- `session-modes` with `unlock-dialog`, and no rebuild of the docks when the lock state changes.
+  Without this the lock screen disables the extension, the strut goes away and each maximized window
+  redraws two times per lock.
+- The close button of the previews stays visible, a touch has no hover.
+- The button for all windows, and a call to `extendMenu` for the two halves.
+
+The general long press of `TouchGestures` does not fire on the dock, it works only in a window actor.
+The dock has one long press, from `AppIcon`.
+
+Bottom swipe over the dock: St.Button stops the touch begin, and then Clutter removes all actions from
+the event chain of this touch, also the `EdgeDragAction`. `captured-event` of the stage still gets the
+touch, so `dock.js` has its own copy of the swipe rules. The shell drag code takes a grab on each touch
+begin, and the stage then gets nothing more. So `dock.js` wraps `_grabActor`: a touch that starts in the
+bottom 20 px gets no grab. A tap there still reaches the icon.
+
+A window in full screen hides the dock and its strut. GJS OSK raises itself to the top of `uiGroup`, so
+it covers the dock.
+
+`web-youtube.desktop` has `StartupWMClass=brave-www.youtube.com__-Default`. Without it the window of
+the web app gets a second icon in the dock. The name comes from the `--app` URL and the Brave profile.
+
+If Tablet Shell runs on the tablet, it skips its own Dock when Dash to Dock is in `enabled-extensions`.
+
+Test without the tablet: a headless shell on the PC with both extensions, see "Touch and windows".
+Injected touch shows all the points above. In `gdbus call`, `\n` in a JS string becomes a real line
+break, and `Clutter.get_current_event().get_event_sequence()` gives a new object for each call, so
+compare the slot.
+
 ## Access and security
 
 - sshd accepts connections from 100.64.0.0/10 only. `user` logs in with the password, root with a
@@ -485,3 +538,39 @@ with a normal mouse and with both extensions off. Close the menu first. See bead
 - The session starts with auto login and locks at once. The PIN pad of the extension sends the
   digits to the normal password prompt. Default PIN: `1234`, the password of `user`.
 - The disk is not encrypted and the bootloader is unlocked: physical access gives access to data.
+
+## Network interfaces, hotspot, battery log
+
+The SCSC driver makes 4 WLAN interfaces: `wlan0`, `wlan1`, `p2p0`, `wifi-aware0`. Without a filter GNOME shows 4 adapters. `etc/NetworkManager/conf.d/51-gta4xl-unmanaged.conf` keeps only `wlan0` under NetworkManager.
+
+The test hotspot on the PC is the NetworkManager profile `Hotspot-1` (SSID `HIBY`, open network, USB adapter RTL8812AU). It has no autoconnect. After you connect the adapter again, run `nmcli connection up Hotspot-1`.
+
+`gta4xl-batterylog.service` writes state changes to `/var/lib/gta4xl-battery/events.jsonl`. `akku-statistik` reads this file, and `akku-statistik --text` prints the same data. The service reads the screen state from `/sys/class/backlight/panel/brightness`, which is 0 at DPMS off. The `otg` power supply reports online with a USB mouse attached, so it does not count as charger.
+
+## GTK4 dumb buffers
+
+GTK4 with the GL renderer can ask Panfrost for a scanout buffer that is not 32 bpp. Mesa then calls `DRM_IOCTL_MODE_CREATE_DUMB`. `decon_kms.c` accepted only 32 bpp and returned EINVAL, so `get_back_bo` failed and the old code kept a back buffer with a NULL image. The next swap then crashed in `create_wl_buffer`. Mesa now clears the back buffer on failure, and `dk_dumb_create` accepts each size that is a multiple of 8 bits.
+
+## USB-C monitor test
+
+A USB-C monitor charges the tablet with USB PD and shows a Realtek Billboard device (`0bda:5450`). This device reports SVID `0xFF01`, so the monitor offers DisplayPort Alt Mode and the tablet does not enter it.
+
+Facts from the kernel source:
+
+- `include/dt-bindings/clock/exynos9610.h` has `DP_LINK` clocks in CMU_USB, and `dpu20/cal_9610` has DisplayPort registers. So the SoC appears to have a DisplayPort block.
+- `sm5713_policy.c` has PD messages for discover, enter mode and DP configure.
+- `CONFIG_EXYNOS_DISPLAYPORT` is off, the device tree has no DisplayPort node, `has_combo_phy` is 0, and dwc3 runs with `maximum-speed = high-speed`.
+
+The open question is the board: DisplayPort needs the SuperSpeed lanes at the connector, and public sources describe this port as USB 2.0. Test: set dwc3 to `super-speed`, attach a USB 3 device, and look for it on bus 002. If it stays on bus 001 in both plug directions, the lanes are probably not connected, and native video out is not possible.
+
+## Zed on the GPU
+
+Zed uses wgpu. Panfork has no Vulkan, but the wgpu GL backend works on Panfork with three changes. `tools/tablet/zed.sh` installs Zed and `/usr/local/bin/zed` sets the variables.
+
+- `/opt/panfork/share/glvnd/egl_vendor.d/50_mesa.json` has the full library path. The RPATH of Zed has `/usr/lib/aarch64-linux-gnu`, so without it Zed loads the Ubuntu `libEGL_mesa`, which has no driver for this GPU.
+- `PANFORK_EGL_WL_PBUFFER=1`: wgpu looks for an EGL config with the pbuffer bit in each tier and never makes a pbuffer. The Wayland configs have this bit only with this variable.
+- `PANFORK_VS_SSBO=1`: Panfrost reports 0 storage buffers for vertex shaders. Zed reads them in the vertex shader, so the pipelines were invalid. Do not set this variable system wide.
+
+Check: `~/.local/share/zed/logs/Zed.log` shows `Selected GPU adapter: "Mali-G72 (Panfrost)" (Gl)` and no `GPU error`. Zed uses about 18 % of one core after start, and about 160 % on lavapipe.
+
+The Spotify web app is optional now: `WITH_SPOTIFY=1 tools/tablet/more-apps.sh`.

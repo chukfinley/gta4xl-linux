@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Akku-Statistik
+Comment=Bildschirmzeit, Tiefschlaf und echte Ladezeit
+Exec=akku-statistik
+Icon=battery-good-symbolic
+Terminal=false
+Categories=System;Monitor;
+Keywords=Akku;Batterie;Bildschirmzeit;Laden;Battery;
+StartupWMClass=de.gta4xl.AkkuStatistik

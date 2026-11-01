@@ -1,0 +1,249 @@
+#!/usr/bin/python3
+"""Show screen time, sleep time and real charge time from the gta4xl-batterylog data.
+
+akku-statistik          open the window
+akku-statistik --text   print the same data
+"""
+import datetime as dt
+import json
+import os
+import sys
+import time
+
+LOG = os.environ.get("BATTERY_LOG", "/var/lib/gta4xl-battery/events.jsonl")
+MAX_AWAKE_GAP = 360
+MIN_SESSION = 60
+
+
+def load(path=LOG):
+    rows = []
+    try:
+        with open(path) as f:
+            for line in f:
+                try:
+                    rows.append(json.loads(line))
+                except ValueError:
+                    pass
+    except OSError:
+        pass
+    return rows
+
+
+def now_row(rows):
+    """Copy the last state to the present time, so the open span counts."""
+    if not rows:
+        return rows
+    last = rows[-1]
+    row = dict(last)
+    row["t"] = time.time()
+    with open("/proc/sys/kernel/random/boot_id") as f:
+        boot = f.read().strip()[:8]
+    if boot == last["b"]:
+        row["s"] = time.clock_gettime(time.CLOCK_BOOTTIME) - time.clock_gettime(time.CLOCK_MONOTONIC)
+    else:
+        row["b"] = boot
+    return rows + [row]
+
+
+def spans(rows):
+    """Yield (row, start, end, sleep seconds). A span over a reboot does not count."""
+    for a, b in zip(rows, rows[1:]):
+        total = b["t"] - a["t"]
+        if a["b"] != b["b"] or total <= 0:
+            continue
+        sleep = min(total, max(0.0, b["s"] - a["s"]))
+        if total - sleep > MAX_AWAKE_GAP:
+            total = sleep + MAX_AWAKE_GAP
+        yield a, a["t"], a["t"] + total, sleep
+
+
+def sessions(rows):
+    """Return charge sessions: real charge time ends at 100 %, not at unplug."""
+    out = []
+    cur = None
+    for prev, row in zip([None] + rows, rows):
+        p = row["p"]
+        if p and (prev is None or not prev["p"]):
+            cur = {"start": row["t"], "from": row["c"], "full": None, "end": None, "to": row["c"]}
+            out.append(cur)
+        if cur is None:
+            continue
+        if p:
+            cur["to"] = row["c"]
+            if cur["full"] is None and (row["c"] >= 100 or row["st"] == "Full"):
+                cur["full"] = row["t"]
+        else:
+            cur["end"] = row["t"]
+            cur = None
+    return [s for s in out if s["end"] is None or s["end"] - s["start"] >= MIN_SESSION]
+
+
+def add(total, row, seconds, sleep):
+    awake = max(0.0, seconds - sleep)
+    total["sleep"] += sleep
+    total["on" if row["on"] else "off"] += awake
+
+
+def totals(rows, start, end):
+    t = {"on": 0.0, "off": 0.0, "sleep": 0.0}
+    for row, a, b, sleep in spans(rows):
+        if row["p"]:
+            continue
+        lo, hi = max(a, start), min(b, end)
+        if hi > lo:
+            add(t, row, hi - lo, sleep * (hi - lo) / (b - a))
+    return t
+
+
+def charge_seconds(rows, start, end):
+    n = 0.0
+    for row, a, b, sleep in spans(rows):
+        if row["p"]:
+            n += max(0.0, min(b, end) - max(a, start))
+    return n
+
+
+def fmt(seconds):
+    m = int(seconds + 30) // 60
+    if m < 60:
+        return f"{m} min"
+    return f"{m // 60} h {m % 60} min"
+
+
+def stamp(t):
+    d = dt.datetime.fromtimestamp(t)
+    if d.date() == dt.date.today():
+        return d.strftime("heute %H:%M")
+    return d.strftime("%d.%m. %H:%M")
+
+
+def midnight(days_back=0):
+    d = dt.datetime.combine(dt.date.today(), dt.time()) - dt.timedelta(days=days_back)
+    return d.timestamp()
+
+
+def report(rows):
+    """Return a list of (group title, [(label, value)])."""
+    if len(rows) < 2:
+        return [("Akku", [("Noch keine Daten", "Der Dienst sammelt gerade")])]
+    now = rows[-1]["t"]
+    groups = []
+    all_sessions = sessions(rows)
+    cur = all_sessions[-1] if all_sessions and all_sessions[-1]["end"] is None else None
+    done = [s for s in all_sessions if s["end"] is not None]
+
+    if cur:
+        end = cur["full"] or now
+        lines = [
+            ("Ladestand", f"{rows[-1]['c']} %"),
+            ("Lädt seit", stamp(cur["start"])),
+            ("Echte Ladezeit", fmt(end - cur["start"])),
+            ("Geladen", f"{cur['from']} % auf {cur['to']} %"),
+        ]
+        gained = cur["to"] - cur["from"]
+        seconds = end - cur["start"]
+        if cur["full"]:
+            lines.append(("Voll seit", stamp(cur["full"])))
+        elif gained >= 2 and seconds > 0:
+            rate = gained / seconds
+            lines.append(("Tempo", f"{rate * 3600:.0f} % pro Stunde"))
+            lines.append(("Voll in etwa", fmt((100 - cur["to"]) / rate)))
+        groups.append(("Lädt gerade", lines))
+
+    start = done[-1]["end"] if done else rows[0]["t"]
+    end = cur["start"] if cur else now
+    t = totals(rows, start, end)
+    use = [r for r in rows if start <= r["t"] <= end]
+    used = use[0]["c"] - use[-1]["c"] if use else 0
+    span = t["on"] + t["off"] + t["sleep"]
+    lines = [
+        ("Ladestand", f"{rows[-1]['c']} %"),
+        ("Bildschirm an", fmt(t["on"])),
+        ("Bildschirm aus", fmt(t["off"])),
+        ("Tiefschlaf", fmt(t["sleep"])),
+        ("Verbrauch", f"{used} %"),
+    ]
+    if t["on"] >= 600 and used >= 2:
+        lines.append(("Hochrechnung 100 % Bildschirm an", fmt(t["on"] * 100 / used)))
+    if not cur and span >= 1800 and used >= 2:
+        lines.append(("Rest bei dieser Nutzung", fmt(rows[-1]["c"] * span / used)))
+    groups.append(("Letzte Ladung bis jetzt" if not cur else "Letzte Akku-Phase", lines))
+
+    t = totals(rows, midnight(), now)
+    groups.append(("Heute", [
+        ("Bildschirm an", fmt(t["on"])),
+        ("Bildschirm aus", fmt(t["off"])),
+        ("Tiefschlaf", fmt(t["sleep"])),
+        ("Am Ladegerät", fmt(charge_seconds(rows, midnight(), now))),
+    ]))
+
+    lines = []
+    for s in reversed(done[-6:]):
+        end = s["full"] or s["end"]
+        lines.append((f"{stamp(s['start'])}, {s['from']} % auf {s['to']} %", fmt(end - s["start"])))
+    if lines:
+        groups.append(("Ladevorgänge, echte Ladezeit", lines))
+
+    lines = []
+    for i in range(1, 7):
+        t = totals(rows, midnight(i), midnight(i - 1))
+        if t["on"] + t["off"] + t["sleep"] > 0:
+            label = (dt.date.today() - dt.timedelta(days=i)).strftime("%d.%m.")
+            lines.append((label, f"Bildschirm an {fmt(t['on'])}"))
+    if lines:
+        groups.append(("Letzte Tage", lines))
+    return groups
+
+
+def text(groups):
+    for title, lines in groups:
+        print(title)
+        for label, value in lines:
+            print(f"  {label}: {value}")
+
+
+def window():
+    os.environ.setdefault("GSK_RENDERER", "cairo")
+    import gi
+    gi.require_version("Gtk", "4.0")
+    gi.require_version("Adw", "1")
+    from gi.repository import Adw, GLib, Gtk
+
+    def activate(app):
+        win = Adw.ApplicationWindow(application=app, title="Akku-Statistik", default_width=520, default_height=760)
+        view = Adw.ToolbarView()
+        view.add_top_bar(Adw.HeaderBar())
+        scroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER)
+        view.set_content(scroll)
+        win.set_content(view)
+
+        def refresh():
+            page = Adw.PreferencesPage()
+            for title, lines in report(now_row(load())):
+                group = Adw.PreferencesGroup(title=title)
+                for label, value in lines:
+                    row = Adw.ActionRow(title=label)
+                    row.add_suffix(Gtk.Label(label=value, css_classes=["dim-label"], selectable=True))
+                    group.add(row)
+                page.add(group)
+            scroll.set_child(page)
+            return True
+
+        refresh()
+        GLib.timeout_add_seconds(30, refresh)
+        win.present()
+
+    app = Adw.Application(application_id="de.gta4xl.AkkuStatistik")
+    app.connect("activate", activate)
+    return app.run([])
+
+
+def main():
+    if "--text" in sys.argv:
+        text(report(now_row(load())))
+        return 0
+    return window()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

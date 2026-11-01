@@ -282,3 +282,83 @@ diff -ru src/egl/drivers/dri2/platform_surfaceless.c /opt/src/panfork/src/egl/dr
           continue;
  
 Nur in /opt/src/panfork/src/egl/generate: __pycache__.
+
+diff --git a/src/egl/drivers/dri2/platform_wayland.c b/src/egl/drivers/dri2/platform_wayland.c
+index 70c07cc..4e67973 100644
+--- a/src/egl/drivers/dri2/platform_wayland.c
++++ b/src/egl/drivers/dri2/platform_wayland.c
+@@ -1085,8 +1085,10 @@ get_back_bo(struct dri2_egl_surface *dri2_surf)
+ 
+    if (dri2_dpy->is_different_gpu && dri2_surf->back->linear_copy == NULL) {
+       create_dri_image_diff_gpu(dri2_surf, linear_dri_image_format, use_flags);
+-      if (dri2_surf->back->linear_copy == NULL)
+-          return -1;
++      if (dri2_surf->back->linear_copy == NULL) {
++         dri2_surf->back = NULL;
++         return -1;
++      }
+    }
+ 
+    if (dri2_surf->back->dri_image == NULL) {
+@@ -1097,8 +1099,12 @@ get_back_bo(struct dri2_egl_surface *dri2_surf)
+       dri2_surf->back->age = 0;
+    }
+ 
+-   if (dri2_surf->back->dri_image == NULL)
++   /* Do not keep a back buffer without an image: the next swap sees back != NULL,
++    * skips the allocation and creates a wl_buffer from NULL. */
++   if (dri2_surf->back->dri_image == NULL) {
++      dri2_surf->back = NULL;
+       return -1;
++   }
+ 
+    dri2_surf->back->locked = true;
+ 
+diff --git a/src/egl/drivers/dri2/platform_wayland.c b/src/egl/drivers/dri2/platform_wayland.c
+index 70c07cc..a9085b4 100644
+--- a/src/egl/drivers/dri2/platform_wayland.c
++++ b/src/egl/drivers/dri2/platform_wayland.c
+@@ -2112,6 +2112,10 @@ static const __DRIextension *image_loader_extensions[] = {
+ static EGLBoolean
+ dri2_wl_add_configs_for_visuals(_EGLDisplay *disp)
+ {
++   /* wgpu looks for a config with EGL_PBUFFER_BIT, even if it never makes a pbuffer.
++    * Only clients that set this variable get the bit. */
++   const EGLint surface_type = getenv("PANFORK_EGL_WL_PBUFFER") ?
++      EGL_WINDOW_BIT | EGL_PBUFFER_BIT : EGL_WINDOW_BIT;
+    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+    unsigned int format_count[ARRAY_SIZE(dri2_wl_visuals)] = { 0 };
+    unsigned int count = 0;
+@@ -2127,7 +2131,7 @@ dri2_wl_add_configs_for_visuals(_EGLDisplay *disp)
+             continue;
+ 
+          dri2_conf = dri2_add_config(disp, dri2_dpy->driver_configs[i],
+-               count + 1, EGL_WINDOW_BIT, NULL, dri2_wl_visuals[j].rgba_shifts, dri2_wl_visuals[j].rgba_sizes);
++               count + 1, surface_type, NULL, dri2_wl_visuals[j].rgba_shifts, dri2_wl_visuals[j].rgba_sizes);
+          if (dri2_conf) {
+             if (dri2_conf->base.ConfigID == count + 1)
+                count++;
+@@ -2160,7 +2164,7 @@ dri2_wl_add_configs_for_visuals(_EGLDisplay *disp)
+           * wl_buffer, so add visual c as supported by the client renderer.
+           */
+          dri2_conf = dri2_add_config(disp, dri2_dpy->driver_configs[i],
+-                                     count + 1, EGL_WINDOW_BIT, NULL,
++                                     count + 1, surface_type, NULL,
+                                      dri2_wl_visuals[c].rgba_shifts,
+                                      dri2_wl_visuals[c].rgba_sizes);
+          if (dri2_conf) {
+diff --git a/src/gallium/drivers/panfrost/pan_screen.c b/src/gallium/drivers/panfrost/pan_screen.c
+index ea315f8..91659a5 100644
+--- a/src/gallium/drivers/panfrost/pan_screen.c
++++ b/src/gallium/drivers/panfrost/pan_screen.c
+@@ -476,7 +476,9 @@ panfrost_get_shader_param(struct pipe_screen *screen,
+                 return (1 << PIPE_SHADER_IR_NIR);
+ 
+         case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
+-                return allow_side_effects ? 16 : 0;
++                /* wgpu clients such as Zed read storage buffers in the vertex shader.
++                 * Writes in a vertex shader stay a client bug. */
++                return (allow_side_effects || getenv("PANFORK_VS_SSBO")) ? 16 : 0;
+ 
+         case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
+                 return allow_side_effects ? PIPE_MAX_SHADER_IMAGES : 0;

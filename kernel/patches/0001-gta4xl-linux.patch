@@ -655,10 +655,10 @@ index 0b0b0a96e..419c44130 100644
  	int ret;
 diff --git a/drivers/video/fbdev/exynos/dpu20/decon_kms.c b/drivers/video/fbdev/exynos/dpu20/decon_kms.c
 new file mode 100644
-index 000000000..79acfbd2d
+index 000000000..1749f496a
 --- /dev/null
 +++ b/drivers/video/fbdev/exynos/dpu20/decon_kms.c
-@@ -0,0 +1,558 @@
+@@ -0,0 +1,559 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Minimal DRM/KMS front end for the Exynos DPU20 DECON fbdev driver.
@@ -783,10 +783,11 @@ index 000000000..79acfbd2d
 +	struct dk_bo *bo;
 +	int ret;
 +
-+	if (!args->width || !args->height || args->bpp != 32)
++	/* Mesa also asks for other sizes, for example 64 bpp for GTK4 float surfaces */
++	if (!args->width || !args->height || !args->bpp || args->bpp % 8 || args->bpp > 128)
 +		return -EINVAL;
 +
-+	args->pitch = ALIGN(args->width * 4, 64);
++	args->pitch = ALIGN(args->width * (args->bpp / 8), 64);
 +	args->size = PAGE_ALIGN((u64)args->pitch * args->height);
 +
 +	dmabuf = ion_alloc_dmabuf("ion_system_heap", args->size, 0);

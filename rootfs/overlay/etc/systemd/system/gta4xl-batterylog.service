@@ -1,0 +1,17 @@
+[Unit]
+Description=Log screen, sleep and charge state for akku-statistik
+
+[Service]
+ExecStart=/usr/local/sbin/gta4xl-batterylog
+Restart=always
+RestartSec=10
+Nice=10
+StateDirectory=gta4xl-battery
+StateDirectoryMode=0755
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target
