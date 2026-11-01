@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+"""Keep the audio route of the tablet: gta4xl-audio [speaker|headphone].
+
+Without an argument: wait for the ABOX DSP, write the base mixer state, then follow the headset
+jack. With an argument: set that route once.
+
+PipeWire plays on hw:0,0 (RDMA0, SPUS, SIFS0). This tool only selects the end of that path:
+UAIF2 goes to the TAS2562 speaker amps, UAIF0 goes to the RT5665 headphone output.
+"""
+import fcntl
+import glob
+import os
+import struct
+import subprocess
+import sys
+import time
+
+VERSION = "/sys/devices/platform/14a50000.abox/calliope_version"
+JACK = "Exynos9610-Audio Headset Jack"
+EV_SW = 5
+SW_HEADPHONE_INSERT = 2
+SW_MICROPHONE_INSERT = 4
+SW_LINEOUT_INSERT = 6
+JACK_SWITCHES = {SW_HEADPHONE_INSERT, SW_MICROPHONE_INSERT, SW_LINEOUT_INSERT}
+EVIOCGSW = 0x8000451b | (8 << 16)  # read 8 bytes of switch state
+
+# The Android route sends the amps through the DSM of the DSP (RDMA7). The DSP owns that DMA, so
+# Linux feeds the amps directly. 11 dBV + level * 0.5 dB at full scale. Android uses 20 (21 dBV)
+# behind the speaker protection. There is no protection on this path, so stay far below that.
+AMP_LEVEL = "2"
+
+SPEAKER = [
+    ("HEADPHONE Switch", "0"),
+    ("HPO Playback Switch", "0"),
+    ("ABOX UAIF0 SPK", "RESERVED"),
+    ("Amp Output Level", AMP_LEVEL),
+    ("ABOX UAIF2 SPK", "SIFS0"),
+    ("TAS2562 Left Speaker Switch", "On"),
+    ("TAS2562 Right Speaker Switch", "On"),
+]
+HEADPHONE = [
+    ("TAS2562 Left Speaker Switch", "Off"),
+    ("TAS2562 Right Speaker Switch", "Off"),
+    ("ABOX UAIF2 SPK", "RESERVED"),
+    ("Stereo1 DAC MIXL DAC L1 Switch", "1"),
+    ("Stereo1 DAC MIXR DAC R1 Switch", "1"),
+    ("DAC1 Playback Volume", "172,172"),
+    ("Headphone Playback Volume", "28,28"),
+    ("Disable NG2", "0"),
+    ("HPO Playback Switch", "1"),
+    ("HEADPHONE Switch", "1"),
+    ("ABOX UAIF0 SPK", "SIFS0"),
+]
+
+
+def apply(ctls):
+    script = "".join(f"cset name='{name}' '{value}'\n" for name, value in ctls)
+    subprocess.run(["amixer", "-c", "0", "-q", "-s"], input=script, text=True, check=False)
+
+
+def route(name):
+    apply(HEADPHONE if name == "headphone" else SPEAKER)
+    print("route:", name, flush=True)
+
+
+def wait_dsp():
+    while True:
+        try:
+            with open(VERSION, "rb") as f:
+                if f.read().strip(b"\0\n "):
+                    return
+        except OSError:
+            pass
+        time.sleep(1)
+
+
+def find_jack():
+    for path in glob.glob("/sys/class/input/event*/device/name"):
+        with open(path) as f:
+            if f.read().strip() == JACK:
+                return "/dev/input/" + path.split("/")[4]
+    return None
+
+
+def plugged(fd):
+    state = bytearray(8)
+    fcntl.ioctl(fd, EVIOCGSW, state)
+    return any(state[0] >> bit & 1 for bit in JACK_SWITCHES)
+
+
+def follow():
+    wait_dsp()
+    subprocess.run(["/usr/local/sbin/gta4xl-mixer", "--defaults"], check=False)
+    dev = find_jack()
+    if not dev:
+        route("speaker")
+        print("no jack input device", flush=True)
+        while True:
+            time.sleep(3600)
+    fd = os.open(dev, os.O_RDONLY)
+    current = plugged(fd)
+    route("headphone" if current else "speaker")
+    size = struct.calcsize("qqHHi")
+    while True:
+        _, _, ev_type, code, _ = struct.unpack("qqHHi", os.read(fd, size))
+        if ev_type == EV_SW and code in JACK_SWITCHES:
+            now = plugged(fd)
+            if now != current:
+                current = now
+                route("headphone" if now else "speaker")
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        route(sys.argv[1])
+    else:
+        follow()

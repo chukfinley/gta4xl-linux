@@ -28,7 +28,7 @@ if ! id user >/dev/null 2>&1; then
 fi
 
 systemctl enable NetworkManager ssh bluetooth gdm3 systemd-timesyncd gta4xl-usb-gadget.service serial-getty@ttyGS0.service
-systemctl enable gta4xl-bluetooth.service gta4xl-powerkey.service iio-sensor-proxy.service
+systemctl enable gta4xl-bluetooth.service gta4xl-powerkey.service iio-sensor-proxy.service gta4xl-audio.service
 # Suspend does not resume on this kernel
 systemctl mask suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target sleep.target
 printf 'user-db:user\nsystem-db:local\n' > /etc/dconf/profile/user

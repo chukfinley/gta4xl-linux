@@ -12,6 +12,7 @@ import Shell from 'gi://Shell';
 import St from 'gi://St';
 
 import * as EdgeDragAction from 'resource:///org/gnome/shell/ui/edgeDragAction.js';
+import * as Keyboard from 'resource:///org/gnome/shell/ui/keyboard.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as UnlockDialog from 'resource:///org/gnome/shell/ui/unlockDialog.js';
 
@@ -229,6 +230,15 @@ export default class TabletGestures {
             addPinPad(this);
         };
 
+        // The PIN pad replaces the on-screen keyboard on the lock screen
+        const keyboard = Keyboard.Keyboard.prototype;
+        const open = keyboard.open;
+        this._keyboardOpen = open;
+        keyboard.open = function (...args) {
+            if (!Main.sessionMode.isLocked)
+                open.apply(this, args);
+        };
+
         // Auto login starts the session, the PIN protects it
         if (Main.sessionMode.currentMode === 'user' && !TabletGestures._lockedOnce) {
             TabletGestures._lockedOnce = true;
@@ -262,6 +272,7 @@ export default class TabletGestures {
 
     disable() {
         UnlockDialog.UnlockDialog.prototype._ensureAuthPrompt = this._ensureAuthPrompt;
+        Keyboard.Keyboard.prototype.open = this._keyboardOpen;
         global.display.disconnect(this._windowId);
         this._handle.destroy();
         this._handle = null;

@@ -1,0 +1,6 @@
+# PipeWire uses a fixed sink on card 0, see pipewire.conf.d/50-gta4xl-speaker.conf. ACP probes
+# the 12 ABOX PCMs and finds no usable profile. abox_dump is the debug card of the DSP.
+# dbmdx is the voice wake chip, not a microphone for applications.
+SUBSYSTEM=="sound", KERNEL=="card*", DEVPATH=="*/14a50000.abox/*", ENV{ACP_IGNORE}="1", ENV{PULSE_IGNORE}="1"
+SUBSYSTEM=="sound", KERNEL=="card*", DEVPATH=="*/snd-dbmdx-mach-drv/*", ENV{ACP_IGNORE}="1", ENV{PULSE_IGNORE}="1"
+SUBSYSTEM=="sound", KERNEL=="card*", DEVPATH=="*/platform/sound/*", ENV{ACP_IGNORE}="1", ENV{PULSE_IGNORE}="1"

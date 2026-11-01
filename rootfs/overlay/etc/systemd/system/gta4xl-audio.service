@@ -1,0 +1,10 @@
+[Unit]
+Description=Audio route for the speaker and the headset jack
+After=sound.target
+
+[Service]
+ExecStart=/usr/local/sbin/gta4xl-audio
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
