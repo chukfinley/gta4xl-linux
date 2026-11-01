@@ -30,9 +30,16 @@ def main():
                                            "/net/hadess/SensorProxy", "net.hadess.SensorProxy", None)
     proxy.connect("g-properties-changed", changed)
     proxy.call_sync("ClaimAccelerometer", None, 0, -1, None)
-    value = proxy.get_cached_property("AccelerometerOrientation")
-    if value:
-        apply(value.unpack())
+
+    def current(*_args):
+        value = proxy.get_cached_property("AccelerometerOrientation")
+        if value:
+            apply(value.unpack())
+
+    current()
+    # Auto rotation comes back from Settings or the Control Center: turn to the sensor at once
+    monitor = Gio.File.new_for_path(LOCK).monitor_file(Gio.FileMonitorFlags.NONE, None)
+    monitor.connect("changed", current)
     GLib.MainLoop().run()
 
 
