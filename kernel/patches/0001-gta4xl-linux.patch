@@ -295,13 +295,14 @@ index 05f14563a..d472ab5f2 100644
 +obj-$(CONFIG_EXYNOS_DECON_KMS) += decon_kms.o
  obj-y += panels/
 diff --git a/drivers/video/fbdev/exynos/dpu20/decon.h b/drivers/video/fbdev/exynos/dpu20/decon.h
-index 4e366ceec..e1977d978 100644
+index 4e366ceec..339895bd4 100644
 --- a/drivers/video/fbdev/exynos/dpu20/decon.h
 +++ b/drivers/video/fbdev/exynos/dpu20/decon.h
-@@ -1147,6 +1147,10 @@ void dpu_set_mres_config(struct decon_device *decon, struct decon_reg_data *regs
+@@ -1147,6 +1147,11 @@ void dpu_set_mres_config(struct decon_device *decon, struct decon_reg_data *regs
  int decon_check_var(struct fb_var_screeninfo *var, struct fb_info *info);
  int decon_set_par(struct fb_info *info);
  int decon_pan_display(struct fb_var_screeninfo *var, struct fb_info *info);
++void decon_hide_buffer(struct decon_device *decon);
 +int decon_show_buffer(struct decon_device *decon, dma_addr_t addr,
 +		enum decon_pixel_format format, u32 width, u32 height, u32 pitch_px);
 +int decon_kms_blank(struct decon_device *decon, int blank_mode);
@@ -444,7 +445,7 @@ index 20a52c044..941c6ebb6 100644
  	ret = decon_create_esd_thread(decon);
  	if (ret)
 diff --git a/drivers/video/fbdev/exynos/dpu20/decon_dsi.c b/drivers/video/fbdev/exynos/dpu20/decon_dsi.c
-index 0b0b0a96e..d58c3e671 100644
+index 0b0b0a96e..419c44130 100644
 --- a/drivers/video/fbdev/exynos/dpu20/decon_dsi.c
 +++ b/drivers/video/fbdev/exynos/dpu20/decon_dsi.c
 @@ -851,7 +851,7 @@ int decon_pan_display(struct fb_var_screeninfo *var, struct fb_info *info)
@@ -456,10 +457,12 @@ index 0b0b0a96e..d58c3e671 100644
  			var->xoffset, var->yoffset,
  			var->xres, var->yres,
  			var->xres_virtual, var->yres_virtual);
-@@ -927,6 +927,61 @@ int decon_pan_display(struct fb_var_screeninfo *var, struct fb_info *info)
+@@ -927,6 +927,94 @@ int decon_pan_display(struct fb_var_screeninfo *var, struct fb_info *info)
  }
  EXPORT_SYMBOL(decon_pan_display);
  
++static bool decon_kms_win_hidden;
++
 +/* Scan out a buffer that is already mapped into the DPU IOMMU. Caller holds the fb lock. */
 +int decon_show_buffer(struct decon_device *decon, dma_addr_t addr,
 +		enum decon_pixel_format format, u32 width, u32 height, u32 pitch_px)
@@ -493,6 +496,11 @@ index 0b0b0a96e..d58c3e671 100644
 +	decon_hiber_block_exit(decon);
 +	decon_to_psr_info(decon, &psr);
 +
++	if (decon_kms_win_hidden) {
++		decon_reg_win_enable_and_update(decon->id, decon->dt.dft_win, true);
++		decon_kms_win_hidden = false;
++	}
++
 +	set_bit(dpp_id, &decon->cur_using_dpp);
 +	set_bit(dpp_id, &decon->prev_used_dpp);
 +	if (v4l2_subdev_call(decon->dpp_sd[dpp_id], core, ioctl, DPP_WIN_CONFIG, &config)) {
@@ -515,15 +523,41 @@ index 0b0b0a96e..d58c3e671 100644
 +}
 +EXPORT_SYMBOL(decon_show_buffer);
 +
++/*
++ * Stop reading from the current buffer. A compositor frees its buffers on exit while DECON
++ * still fetches them, and the IOMMU fault that follows is a kernel panic. Caller holds the fb lock.
++ */
++void decon_hide_buffer(struct decon_device *decon)
++{
++	struct decon_win *win = decon->win[decon->dt.dft_win];
++	struct decon_mode_info psr;
++
++	if (decon->dt.out_type != DECON_OUT_DSI || decon_kms_win_hidden ||
++	    decon->state == DECON_STATE_INIT || IS_DECON_OFF_STATE(decon))
++		return;
++
++	decon_hiber_block_exit(decon);
++	decon_to_psr_info(decon, &psr);
++	decon_reg_win_enable_and_update(decon->id, decon->dt.dft_win, false);
++	decon_reg_update_req_window(decon->id, win->idx);
++	decon_reg_start(decon->id, &psr);
++	decon_wait_for_vsync(decon, VSYNC_TIMEOUT_MSEC);
++	if (decon_reg_wait_update_done_and_mask(decon->id, &psr, SHADOW_UPDATE_TIMEOUT) < 0)
++		decon_err("%s: wait_for_update_timeout\n", __func__);
++	decon_kms_win_hidden = true;
++	decon_hiber_unblock(decon);
++}
++EXPORT_SYMBOL(decon_hide_buffer);
++
  int decon_mmap(struct fb_info *info, struct vm_area_struct *vma)
  {
  	int ret;
 diff --git a/drivers/video/fbdev/exynos/dpu20/decon_kms.c b/drivers/video/fbdev/exynos/dpu20/decon_kms.c
 new file mode 100644
-index 000000000..7ad8088cd
+index 000000000..3bbfcd384
 --- /dev/null
 +++ b/drivers/video/fbdev/exynos/dpu20/decon_kms.c
-@@ -0,0 +1,535 @@
+@@ -0,0 +1,543 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Minimal DRM/KMS front end for the Exynos DPU20 DECON fbdev driver.
@@ -825,7 +859,15 @@ index 000000000..7ad8088cd
 +
 +static void dk_pipe_disable(struct drm_simple_display_pipe *pipe)
 +{
++	struct dk_device *dk = to_dk(pipe->crtc.dev);
++	struct decon_device *decon = dk->decon;
++	struct fb_info *info = decon->win[decon->dt.dft_win]->fbinfo;
++
 +	dk_backlight(false);
++	if (lock_fb_info(info)) {
++		decon_hide_buffer(decon);
++		unlock_fb_info(info);
++	}
 +	dk_send_event(&pipe->crtc);
 +}
 +
