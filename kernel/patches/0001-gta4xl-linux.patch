@@ -1,3 +1,25 @@
+diff --git a/drivers/battery_v2/sec_battery.c b/drivers/battery_v2/sec_battery.c
+index cdefa28d7..3546a2bd6 100644
+--- a/drivers/battery_v2/sec_battery.c
++++ b/drivers/battery_v2/sec_battery.c
+@@ -6086,13 +6086,15 @@ static int sec_bat_get_property(struct power_supply *psy,
+ 		value.intval = SEC_BATTERY_CURRENT_MA;
+ 		psy_do_property(battery->pdata->fuelgauge_name, get,
+ 			POWER_SUPPLY_PROP_CURRENT_NOW, value);
+-		val->intval = value.intval;
++		/* mA from the gauge, the power supply class and UPower expect uA */
++		val->intval = value.intval * 1000;
+ 		break;
+ 	case POWER_SUPPLY_PROP_CURRENT_AVG:
+ 		value.intval = SEC_BATTERY_CURRENT_MA;
+ 		psy_do_property(battery->pdata->fuelgauge_name, get,
+ 			POWER_SUPPLY_PROP_CURRENT_AVG, value);
+-		val->intval = value.intval;
++		/* mA from the gauge, the power supply class and UPower expect uA */
++		val->intval = value.intval * 1000;
+ 		break;
+ 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
+ #if defined(CONFIG_BATTERY_CISD)
 diff --git a/drivers/gpu/drm/Kconfig b/drivers/gpu/drm/Kconfig
 index 595d0c96b..090f7b381 100644
 --- a/drivers/gpu/drm/Kconfig
@@ -498,10 +520,10 @@ index 0b0b0a96e..d58c3e671 100644
  	int ret;
 diff --git a/drivers/video/fbdev/exynos/dpu20/decon_kms.c b/drivers/video/fbdev/exynos/dpu20/decon_kms.c
 new file mode 100644
-index 000000000..cd99c68fa
+index 000000000..df3b87514
 --- /dev/null
 +++ b/drivers/video/fbdev/exynos/dpu20/decon_kms.c
-@@ -0,0 +1,544 @@
+@@ -0,0 +1,543 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Minimal DRM/KMS front end for the Exynos DPU20 DECON fbdev driver.
@@ -787,7 +809,6 @@ index 000000000..cd99c68fa
 +
 +	if (!bd)
 +		return;
-+	mutex_lock(&bd->update_lock);
 +	if (on && saved >= 0) {
 +		bd->props.brightness = saved;
 +		saved = -1;
@@ -795,8 +816,8 @@ index 000000000..cd99c68fa
 +		saved = bd->props.brightness;
 +		bd->props.brightness = 0;
 +	}
++	/* Takes bd->update_lock itself */
 +	backlight_update_status(bd);
-+	mutex_unlock(&bd->update_lock);
 +}
 +
 +static void dk_pipe_enable(struct drm_simple_display_pipe *pipe,
