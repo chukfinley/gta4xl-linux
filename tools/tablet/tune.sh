@@ -33,3 +33,4 @@ CONF
 chown user:user /home/user/.config/brave-flags.conf
 echo 'vm.swappiness=100' > /etc/sysctl.d/90-gta4xl.conf
 sysctl -q -p /etc/sysctl.d/90-gta4xl.conf
+sed -i 's#^Exec=/usr/bin/brave-browser-stable#Exec=/usr/local/bin/brave-browser#' /usr/share/applications/brave-browser.desktop
