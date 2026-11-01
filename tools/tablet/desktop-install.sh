@@ -12,7 +12,7 @@ mkdir -p /etc/xdg/alacritty
 cat > /etc/xdg/alacritty/alacritty.toml <<'CONF'
 [window]
 padding = { x = 8, y = 6 }
-decorations = "None"
+decorations = "Full"
 
 [font]
 normal = { family = "JetBrains Mono" }

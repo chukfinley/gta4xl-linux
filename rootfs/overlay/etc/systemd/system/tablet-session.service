@@ -21,6 +21,7 @@ Environment=XDG_SESSION_TYPE=wayland XDG_SESSION_CLASS=user XDG_SEAT=seat0 XDG_V
 ExecStartPre=+/usr/bin/chvt 7
 ExecStart=/usr/local/bin/tablet-session
 Restart=always
+RestartMode=direct
 RestartSec=1
 
 [Install]

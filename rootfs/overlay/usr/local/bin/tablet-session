@@ -8,9 +8,10 @@ set -a
 . /etc/environment.d/90-panfork.conf
 set +a
 PREFIX=/opt/wayfire
+mv -f "$XDG_RUNTIME_DIR/wayfire.log" "$XDG_RUNTIME_DIR/wayfire.log.1" 2>/dev/null
 if [ -x "$PREFIX/bin/wayfire" ]; then
     export PATH="$PREFIX/bin:$PATH"
     export WAYFIRE_PLUGIN_PATH=/opt/tablet-desktop/lib/wayfire WAYFIRE_PLUGIN_XML_PATH=/opt/tablet-desktop/share/wayfire/metadata
-    exec "$PREFIX/bin/wayfire" -c /etc/tablet-desktop/wayfire.ini
+    exec "$PREFIX/bin/wayfire" -c /etc/tablet-desktop/wayfire.ini > "$XDG_RUNTIME_DIR/wayfire.log" 2>&1
 fi
 exec /usr/bin/wayfire -c /etc/tablet-desktop/wayfire.ini
