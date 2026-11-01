@@ -14,3 +14,9 @@
 .keyboard-key.enter-key,
 .keyboard-key.default-key { background-color: #6b6b70; }
 .ws-tmb:active, .workspace-thumbnail-indicator { border-color: #d0d0d4; }
+
+.gta4xl-resize-handle {
+    background-color: rgba(60, 60, 64, 0.85);
+    border-radius: 36px;
+    color: #ffffff;
+}

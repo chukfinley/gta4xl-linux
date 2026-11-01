@@ -1,3 +1,4 @@
 LABEL=gta4xl-root	/	ext4	defaults,noatime,discard	0 1
 PARTLABEL=efs		/efs	ext4	ro,nosuid,nodev,noexec,nofail	0 0
 tmpfs			/tmp	tmpfs	defaults,nosuid,nodev	0 0
+LABEL=gta4xl-sd	/media/sd	ext4	defaults,noatime,nofail,x-gvfs-show	0 2
