@@ -28,8 +28,6 @@ log() {
 }
 
 GADGET=/sys/kernel/config/usb_gadget/g1
-HOST_IP=172.16.42.2
-DEV_IP=172.16.42.1
 
 wait_for() {
 	n=0
@@ -50,11 +48,8 @@ usb_gadget_up() {
 	echo "debug" > $GADGET/configs/c.1/strings/0x409/configuration
 	echo 500 > $GADGET/configs/c.1/MaxPower
 
-	# Samsung's NCM never transmits; ECM with fixed MACs keeps the host interface name stable
-	mkdir -p $GADGET/functions/ecm.usb0 $GADGET/functions/acm.usb0
-	echo 02:47:54:41:34:01 > $GADGET/functions/ecm.usb0/dev_addr
-	echo 02:47:54:41:34:02 > $GADGET/functions/ecm.usb0/host_addr
-	ln -s $GADGET/functions/ecm.usb0 $GADGET/configs/c.1/
+	# Serial only: ECM and NCM move no data in this kernel, see gta4xl-usb-gadget
+	mkdir -p $GADGET/functions/acm.usb0
 	ln -s $GADGET/functions/acm.usb0 $GADGET/configs/c.1/
 
 	# Only in the debug shell, never while the rootfs is mounted here:
@@ -98,30 +93,6 @@ usb_gadget_up() {
 		done
 	) &
 
-	IFACE=$(cat $GADGET/functions/ecm.usb0/ifname 2>/dev/null)
-	[ -n "$IFACE" ] && [ "$IFACE" != "(unnamed net_device)" ] || IFACE=usb0
-	n=0
-	while ! ip link show "$IFACE" >/dev/null 2>&1 && [ $n -lt 50 ]; do
-		sleep 0.1
-		n=$((n + 1))
-	done
-	ip addr add $DEV_IP/24 dev $IFACE
-	ip link set $IFACE up
-	log "network on $IFACE: $(ip -o addr show dev $IFACE 2>&1 | head -n 1)"
-	log "interfaces: $(ls /sys/class/net | tr '\n' ' ')"
-
-	cat > /run/udhcpd.conf <<-EOF
-	start $HOST_IP
-	end $HOST_IP
-	interface $IFACE
-	max_leases 1
-	lease_file /run/udhcpd.leases
-	option subnet 255.255.255.0
-	EOF
-	touch /run/udhcpd.leases
-	udhcpd /run/udhcpd.conf
-	telnetd -b $DEV_IP:23 -l /bin/sh
-	log "telnet $DEV_IP"
 }
 
 log "gta4xl Linux initramfs, kernel $(uname -r)"
@@ -156,7 +127,7 @@ if [ -n "$ROOT" ] && [ $debug -eq 0 ]; then
 fi
 
 usb_gadget_up storage
-log "debug shell: telnet $DEV_IP (USB), SD card and internal storage exported as USB drives"
+log "debug shell: ttyACM0 on the PC, userdata exported as USB drive"
 while true; do
 	setsid cttyhack sh -l < /dev/tty1 > /dev/tty1 2>&1
 	sleep 1
