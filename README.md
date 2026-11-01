@@ -15,13 +15,13 @@ are not tested. You do this at your own risk.
 | Touch | works |
 | On-screen keyboard | works |
 | WLAN | works |
-| Bluetooth (BlueZ) | hci0 works, audio test open |
-| Sensor hub, rotation bridge | hub and data work, GNOME test open |
-| Pen | open |
+| Bluetooth (BlueZ, A2DP) | works, SBC codec |
+| Sensor hub, auto rotation | works |
+| Pen | detected by libinput, test open |
 | Audio | open |
 | GPU (Mali-G72) | open, software rendering |
 | Suspend | does not resume, disabled |
-| USB network | open, the USB serial console works |
+| USB network | does not work, disabled. USB serial console works |
 
 Details and test results: [docs/gta4xl.md](docs/gta4xl.md).
 

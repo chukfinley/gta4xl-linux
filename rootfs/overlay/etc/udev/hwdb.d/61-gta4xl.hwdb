@@ -1,0 +1,4 @@
+# The Wacom driver reports no resolution, libinput then ignores the pen. 100 units per mm.
+evdev:name:sec_e-pen:*
+ EVDEV_ABS_00=::100
+ EVDEV_ABS_01=::100

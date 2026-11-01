@@ -100,3 +100,24 @@ The LineageOS recovery entry "Reboot to bootloader" is a fastbootd that accepts 
 - `tools/tab-tap.py X Y`: inject a touch tap into `/dev/input/event1`.
 - `tools/tty-run.py`, `tools/tty-push.py`: command and file over the USB serial console.
   ModemManager holds ttyACM0 for some seconds after each USB connect.
+
+## Fixes after the first desktop boot
+
+- USB network: ECM and NCM move no data. TX requests stay queued, `eth_start_xmit` returns
+  TX_BUSY, and NET_TX runs 1.4 million times per second on one core. The gadget is serial only.
+- DPMS: `decon_disable` followed by `decon_enable` leaves the DPP without a frame interrupt
+  ("DPP[2] irq hasn't been occured") and the panel stays black. `decon_kms.c` now switches only
+  the backlight. `gta4xl-powerkey` grabs the touchscreen while the panel is off, because mutter
+  wakes on any input.
+- Night Light: DECON has no gamma LUT here (no DQE driver in dpu20). The extension
+  `gta4xl-tablet` applies a colour shader on `uiGroup`, driven by gsd-color.
+- Pen: libinput ignores a tablet without a resolution. `61-gta4xl.hwdb` sets 100 units per mm.
+- Battery: the driver reports mA, the power supply class needs uA. UPower had rate 0 and no
+  time estimate. `sec_battery.c` multiplies by 1000.
+- The bootloader ignores the boot.img command line. `audit=0` has no effect, so `CONFIG_AUDIT` is
+  off. Check `gta4xl.debug` in recovery before you depend on it.
+- Scale: fractional scale needs `scale-monitor-framebuffer`, and ApplyMonitorsConfig accepts only
+  the exact values from GetCurrentState, for example 1.498.
+- Panel format: the screenshot tool assumes XRGB8888, colours in `tab-shot` can be swapped when
+  mutter picks another format.
+- A heavy build on all cores makes WLAN drop packets. Check that before you suspect the driver.
