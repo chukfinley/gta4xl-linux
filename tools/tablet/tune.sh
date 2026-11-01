@@ -28,7 +28,11 @@ cat > /home/user/.config/brave-flags.conf <<'CONF'
 --touch-events=enabled
 --enable-features=TouchpadOverscrollHistoryNavigation
 --password-store=basic
---disable-gpu
+--ignore-gpu-blocklist
+--disable-gpu-sandbox
+--use-gl=angle
+--use-angle=gles
+--disable-features=Vulkan
 --renderer-process-limit=3
 --disk-cache-size=104857600
 CONF
@@ -36,3 +40,23 @@ chown user:user /home/user/.config/brave-flags.conf
 echo 'vm.swappiness=100' > /etc/sysctl.d/90-gta4xl.conf
 sysctl -q -p /etc/sysctl.d/90-gta4xl.conf
 sed -i 's#^Exec=/usr/bin/brave-browser-stable#Exec=/usr/local/bin/brave-browser#' /usr/share/applications/brave-browser.desktop
+# Electron apps on the GPU through Panfork, on Wayland. The GPU sandbox has no rule for /dev/mali0.
+# Do not use Xwayland with ANGLE here, that test reset the tablet.
+GPU='--ignore-gpu-blocklist --disable-gpu-sandbox --use-gl=angle --use-angle=gles --disable-features=Vulkan'
+D=/usr/share/applications/t3code.desktop
+[ -f "$D" ] && sed -i -E "s/ --disable-gpu( |\$)/ /; / --use-angle=gles/! s#^(Exec=.*) %U#\1 $GPU %U#" "$D"
+# Its autostart entry has no flags and would run on Xwayland
+python3 - <<'PY'
+import json
+p = "/home/user/.config/Mattermost/config.json"
+try:
+    c = json.load(open(p))
+except OSError:
+    c = None
+if c:
+    c["autostart"] = False
+    json.dump(c, open(p, "w"), indent=2)
+PY
+rm -f /home/user/.config/autostart/mattermost-desktop.desktop
+D=/usr/share/applications/mattermost-desktop.desktop
+[ -f "$D" ] && sed -i -E "/ --use-angle=gles/! s#^(Exec=.*) %U#\1 --ozone-platform=wayland --enable-wayland-ime $GPU %U#" "$D"

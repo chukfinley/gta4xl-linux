@@ -1,4 +1,4 @@
-diff -ru a/src/egl/drivers/dri2/platform_surfaceless.c b/src/egl/drivers/dri2/platform_surfaceless.c
+diff -ru -x build -x '*.orig' -x '*.rej' -x __pycache__ a/src/egl/drivers/dri2/platform_surfaceless.c b/src/egl/drivers/dri2/platform_surfaceless.c
 --- a/src/egl/drivers/dri2/platform_surfaceless.c	2022-12-10 01:57:43.000000000 +0100
 +++ b/src/egl/drivers/dri2/platform_surfaceless.c	2026-11-01 02:57:09.926592837 +0100
 @@ -247,10 +247,15 @@
@@ -19,7 +19,7 @@ diff -ru a/src/egl/drivers/dri2/platform_surfaceless.c b/src/egl/drivers/dri2/pl
        if (dri2_dpy->fd < 0)
           continue;
  
-diff -ru a/src/gallium/drivers/panfrost/pan_cmdstream.c b/src/gallium/drivers/panfrost/pan_cmdstream.c
+diff -ru -x build -x '*.orig' -x '*.rej' -x __pycache__ a/src/gallium/drivers/panfrost/pan_cmdstream.c b/src/gallium/drivers/panfrost/pan_cmdstream.c
 --- a/src/gallium/drivers/panfrost/pan_cmdstream.c	2022-12-10 01:57:43.000000000 +0100
 +++ b/src/gallium/drivers/panfrost/pan_cmdstream.c	2026-11-01 02:11:43.838898053 +0100
 @@ -4208,8 +4208,9 @@
@@ -33,7 +33,7 @@ diff -ru a/src/gallium/drivers/panfrost/pan_cmdstream.c b/src/gallium/drivers/pa
          } else {
                  vertex = pan_pool_alloc_desc_cs_v10(&batch->pool.base, COMPUTE_JOB);
                  tiler = pan_pool_alloc_desc_cs_v10(&batch->pool.base, TILER_JOB);
-diff -ru a/src/gallium/drivers/panfrost/pan_context.c b/src/gallium/drivers/panfrost/pan_context.c
+diff -ru -x build -x '*.orig' -x '*.rej' -x __pycache__ a/src/gallium/drivers/panfrost/pan_context.c b/src/gallium/drivers/panfrost/pan_context.c
 --- a/src/gallium/drivers/panfrost/pan_context.c	2022-12-10 01:57:43.000000000 +0100
 +++ b/src/gallium/drivers/panfrost/pan_context.c	2026-11-01 03:09:55.849294167 +0100
 @@ -112,6 +112,12 @@
@@ -49,10 +49,64 @@ diff -ru a/src/gallium/drivers/panfrost/pan_context.c b/src/gallium/drivers/panf
          if (fence) {
                  struct pipe_fence_handle *f = panfrost_fence_create(ctx);
                  pipe->screen->fence_reference(pipe->screen, fence, NULL);
-diff -ru a/src/panfrost/base/pan_vX_base.c b/src/panfrost/base/pan_vX_base.c
+diff -ru -x build -x '*.orig' -x '*.rej' -x __pycache__ a/src/gallium/drivers/panfrost/pan_screen.c b/src/gallium/drivers/panfrost/pan_screen.c
+--- a/src/gallium/drivers/panfrost/pan_screen.c	2022-12-10 01:57:43.000000000 +0100
++++ b/src/gallium/drivers/panfrost/pan_screen.c	2026-11-01 03:53:02.320502514 +0100
+@@ -358,7 +358,9 @@
+                 return 1;
+ 
+         case PIPE_CAP_NATIVE_FENCE_FD:
+-                return 1;
++                /* kbase can not export a sync file. eglDupNativeFenceFDANDROID
++                 * fails, and Chromium stops its GPU process for that. */
++                return !dev->kbase;
+ 
+         default:
+                 return u_pipe_screen_get_param_defaults(screen, param);
+diff -ru -x build -x '*.orig' -x '*.rej' -x __pycache__ a/src/panfrost/base/pan_vX_base.c b/src/panfrost/base/pan_vX_base.c
 --- a/src/panfrost/base/pan_vX_base.c	2022-12-10 01:57:43.000000000 +0100
-+++ b/src/panfrost/base/pan_vX_base.c	2026-11-01 02:52:52.435218170 +0100
-@@ -851,7 +851,8 @@
++++ b/src/panfrost/base/pan_vX_base.c	2026-11-01 03:58:16.307260984 +0100
+@@ -33,6 +33,7 @@
+ #include <stdlib.h>
+ #include <sys/ioctl.h>
+ #include <sys/mman.h>
++#include <sys/stat.h>
+ #include <unistd.h>
+ #include <poll.h>
+ #include <pthread.h>
+@@ -705,19 +706,27 @@
+ 
+         kbase_handle *handles = util_dynarray_begin(&k->gem_handles);
+ 
++        struct stat fd_st;
++
++        if (fstat(fd, &fd_st) < 0) {
++                perror("fstat(dma-buf)");
++                pthread_mutex_unlock(&k->handle_lock);
++                return -1;
++        }
++
+         for (unsigned i = 0; i < size; ++i) {
+                 kbase_handle h = handles[i];
+ 
+                 if (h.fd < 0)
+                         continue;
+ 
+-                ret = os_same_file_description(h.fd, fd);
++                /* This kernel has no kcmp. Each dma-buf has its own inode. */
++                struct stat h_st;
+ 
+-                if (ret == 0) {
++                if (fstat(h.fd, &h_st) == 0 && h_st.st_ino == fd_st.st_ino &&
++                    h_st.st_dev == fd_st.st_dev) {
+                         pthread_mutex_unlock(&k->handle_lock);
+                         return i;
+-                } else if (ret < 0) {
+-                        printf("error in os_same_file_description(%i, %i)\n", h.fd, fd);
+                 }
+         }
+ 
+@@ -851,7 +860,8 @@
          list_for_each_entry_safe(struct kbase_fence, fence, &o->fences, link) {
                  uint64_t value = k->event_slots[fence->slot].last;
  
@@ -62,7 +116,7 @@ diff -ru a/src/panfrost/base/pan_vX_base.c b/src/panfrost/base/pan_vX_base.c
                          LOG("syncobj %p slot %u value %"PRIu64" vs %"PRIu64"\n",
                              o, fence->slot, fence->value, value);
  
-@@ -947,8 +948,8 @@
+@@ -947,8 +957,8 @@
                  util_dynarray_foreach(handles, int32_t, h) {
                          if (*h >= size)
                                  continue;
@@ -73,7 +127,7 @@ diff -ru a/src/panfrost/base/pan_vX_base.c b/src/panfrost/base/pan_vX_base.c
                  }
                  util_dynarray_fini(handles);
  
-@@ -1117,6 +1118,29 @@
+@@ -1117,6 +1127,29 @@
          return a;
  }
  
@@ -103,7 +157,7 @@ diff -ru a/src/panfrost/base/pan_vX_base.c b/src/panfrost/base/pan_vX_base.c
  static int
  kbase_submit(kbase k, uint64_t va, unsigned req,
               struct kbase_syncobj *o,
-@@ -1128,6 +1152,8 @@
+@@ -1128,6 +1161,8 @@
          memcpy(util_dynarray_resize(&buf, int32_t, num_handles),
                 handles, num_handles * sizeof(int32_t));
  
@@ -112,7 +166,7 @@ diff -ru a/src/panfrost/base/pan_vX_base.c b/src/panfrost/base/pan_vX_base.c
          pthread_mutex_lock(&k->handle_lock);
  
          unsigned slot = (req & PANFROST_JD_REQ_FS) ? 0 : 1;
-@@ -1135,10 +1161,14 @@
+@@ -1135,10 +1170,14 @@
  
          uint8_t nr = k->atom_number++;
  
@@ -128,7 +182,7 @@ diff -ru a/src/panfrost/base/pan_vX_base.c b/src/panfrost/base/pan_vX_base.c
          };
  
          for (unsigned i = 0; i < KBASE_SLOT_COUNT; ++i)
-diff -ru a/src/panfrost/lib/genxml/decode.c b/src/panfrost/lib/genxml/decode.c
+diff -ru -x build -x '*.orig' -x '*.rej' -x __pycache__ a/src/panfrost/lib/genxml/decode.c b/src/panfrost/lib/genxml/decode.c
 --- a/src/panfrost/lib/genxml/decode.c	2022-12-10 01:57:43.000000000 +0100
 +++ b/src/panfrost/lib/genxml/decode.c	2026-11-01 02:19:56.992215576 +0100
 @@ -1257,7 +1257,14 @@
@@ -147,7 +201,7 @@ diff -ru a/src/panfrost/lib/genxml/decode.c b/src/panfrost/lib/genxml/decode.c
                          fflush(NULL);
                          abort();
                  }
-diff -ru a/src/panfrost/lib/pan_bo.c b/src/panfrost/lib/pan_bo.c
+diff -ru -x build -x '*.orig' -x '*.rej' -x __pycache__ a/src/panfrost/lib/pan_bo.c b/src/panfrost/lib/pan_bo.c
 --- a/src/panfrost/lib/pan_bo.c	2022-12-10 01:57:43.000000000 +0100
 +++ b/src/panfrost/lib/pan_bo.c	2026-11-01 02:51:02.229947062 +0100
 @@ -145,6 +145,12 @@
@@ -188,7 +242,7 @@ diff -ru a/src/panfrost/lib/pan_bo.c b/src/panfrost/lib/pan_bo.c
                  bo->gpu_access = 0;
  
          /* Let's do some cleanup in the BO cache while we hold the
-diff -ru a/src/panfrost/lib/pan_cs.c b/src/panfrost/lib/pan_cs.c
+diff -ru -x build -x '*.orig' -x '*.rej' -x __pycache__ a/src/panfrost/lib/pan_cs.c b/src/panfrost/lib/pan_cs.c
 --- a/src/panfrost/lib/pan_cs.c	2022-12-10 01:57:43.000000000 +0100
 +++ b/src/panfrost/lib/pan_cs.c	2026-11-01 02:29:18.954258613 +0100
 @@ -958,7 +958,7 @@
