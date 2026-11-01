@@ -27,7 +27,8 @@ are not tested. You do this at your own risk.
 | WLAN | works |
 | Bluetooth (BlueZ, A2DP) | keyboard works, buds drop the link after seconds, see docs |
 | Sensor hub, auto rotation | works |
-| Pen | detected by libinput, test open |
+| Pen | libinput gets position and pressure, 4096 levels. Hand test in apps and each rotation open |
+| Creative apps | Krita, Shotcut, Craft apps and the Flutter app notebookllm on Mali. Xournal++, Rnote, Inkscape, GIMP on the CPU. State per app in `tools/tablet/apps.json` |
 | Audio | Bluetooth A2DP: CMF Buds drop the link, open. Speaker sink in PipeWire with GNOME volume, jack route. Confirmation by ear open. No microphone |
 | Video | mpv and Celluloid, 1080p30 H.264 on Panfork with no dropped frames, large touch controls in mpv |
 | GPU (Mali-G72) | Panfork: GNOME Shell, Wayland clients, mpv, Brave, T3 Code and Mattermost on the GPU |

@@ -607,3 +607,28 @@ Zed uses wgpu. Panfork has no Vulkan, but the wgpu GL backend works on Panfork w
 Check: `~/.local/share/zed/logs/Zed.log` shows `Selected GPU adapter: "Mali-G72 (Panfrost)" (Gl)` and no `GPU error`. Zed uses about 18 % of one core after start, and about 160 % on lavapipe.
 
 The Spotify web app is optional now: `WITH_SPOTIFY=1 tools/tablet/more-apps.sh`.
+
+## Creative apps
+
+`tools/tablet/creative-apps.sh` installs the apps. `tools/tablet/apps.json` has the state of each app on the tablet: source, install command, renderer, memory, touch rating, and the type of evidence.
+
+`tools/tablet/gpu-probe.sh ID SECONDS -- CMD` starts an app in the session and writes one JSON line. An app is on the GPU only if a process has `/dev/mali0` open and has `/opt/panfork/lib/dri` mapped. The driver file alone is not proof, llvmpipe uses the same file. Flatpak moves an app to a different cgroup, so the probe reports `exited` while the window is open.
+
+Rules:
+- Flatpak apps have no GPU. The system override of `more-apps.sh` removes `/dev/dri` and sets `GSK_RENDERER=cairo`.
+- GTK3 apps draw with cairo on the CPU, so they are `software`.
+- Krita starts on X11 by default. `QT_QPA_PLATFORM=wayland` and `qtwayland5` put it on Mali with no Xwayland.
+- Xwayland starts on demand, with glamor on Panfork. The test had no reset and no GPU fault.
+- Blender 4.0 needs OpenGL 4.3. Panfork has OpenGL 3.1 (`eglinfo -p wayland`), so Blender is not installed.
+- Kdenlive is removed. `user@1000.service` got SIGKILL at 15:17:00 on 2026-11-01 while Kdenlive started. dmesg has no OOM entry and the kernel has no low memory killer, so the cause is not known. Do not treat this as proof against Kdenlive.
+
+ArtCraft has two parts. The Crafting Apps (PhotoCraft, VectorCraft, LightCraft, PdfCraft) are Rust and egui, Apache-2.0 or MIT, with official `linux-aarch64` packages. They use the wgpu GL backend on Panfork. LightCraft does the photo work on the CPU, because it asks for Vulkan. ArtCraft Studio is a client for cloud models, there is no Linux package. `artcraft-native` (egui) builds in an amd64 Ubuntu container with arm64 multiarch libraries:
+`cargo build -p artcraft_native --release --target aarch64-unknown-linux-gnu`, with `SQLX_OFFLINE=true`, `PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig` and `make`, `cmake`, `nasm`, `clang`. The link needs `libwebkit2gtk-4.1-dev:arm64`.
+
+Flutter Linux arm64 release: an `ubuntu:24.04` arm64 container under qemu with the Flutter 3.47.0 SDK and `make gcc g++ clang cmake ninja-build libgtk-3-dev libsecret-1-dev`. The `webcrypto` build hook looks for `aarch64-linux-gnu-gcc`, so `gcc` is necessary next to clang. A clean build takes about 15 min. Keep the source in a copy under `/mnt/data/android-linux/tmp`. Install the bundle to `/opt/notebookllm`.
+
+Flutter results: Impeller on Mali (`OpenGLESSDF`), 0 GPU faults, touch events arrive as `kind=touch`. On touch the engine gives `pressureMin` and `pressureMax` values with no meaning, so use them only for a stylus. A filled freehand path of about 2 px has gaps, because this path has no MSAA.
+
+Pen: `tools/tablet/pen-test.py` writes events to `sec_e-pen` and logs what a GTK window receives. Axes: X 0 to 13536 on the short side, Y 0 to 22560, pressure 0 to 4095, no tilt. libinput gets position and pressure.
+
+The panel goes off on battery and the tablet sleeps after 120 s. Then only the Power key wakes it, and all SSH work stops. Connect the charger before long tests.
