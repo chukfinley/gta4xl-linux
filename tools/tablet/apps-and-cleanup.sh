@@ -32,10 +32,6 @@ Type=Application
 Categories=Network;
 APP
 }
-webapp spotify "Spotify" https://open.spotify.com audio-headphones
-webapp bitwarden "Bitwarden" https://vault.bitwarden.com dialog-password
-webapp t3chat "T3 Chat" https://t3.chat user-available
-webapp claude "Claude" https://claude.ai user-available
 webapp youtube "YouTube" https://www.youtube.com video-display
 update-desktop-database -q
 
