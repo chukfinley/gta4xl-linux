@@ -568,3 +568,16 @@ Pen: `tools/tablet/pen-test.py` writes events to `sec_e-pen` and logs what a GTK
 The panel goes off on battery and the tablet sleeps after 120 s. Then only the Power key wakes it, and all SSH work stops. Connect the charger before long tests.
 
 Kernel #23: `dk_dumb_create` accepts each size in bits that is a multiple of 8, and `proc_mount` uses `sget_userns`. So Settings no longer needs `GSK_RENDERER=cairo`, and `bwrap` is no longer setuid.
+
+## Wayfire session
+
+`tablet-session.service` (PAM login, tty7, logind seat) starts `/usr/local/bin/tablet-session`. It replaces gdm: `tools/tablet/session-wayfire.sh`, `session-gnome.sh`, `session-confirm.sh`. Files: `tools/tablet/desktop-push.sh`, packages: `tools/tablet/desktop-install.sh`. Four failures in one minute start gdm.
+
+Facts found on the way:
+
+- Do not set `WLR_DRM_NO_ATOMIC`. The legacy path calls `drmModeSetCursor`, the shim has no cursor plane, so the commit fails and Wayfire stops in `post_init`. Atomic works. The cursor is a software cursor.
+- GTK apps hung at start while `xdg-desktop-portal` waited for its GNOME back end: `XDG_CURRENT_DESKTOP=wayfire` and `/etc/xdg-desktop-portal/wayfire-portals.conf`.
+- Power key: `wlopm` through wlr-output-power, the backlight goes to 0 and comes back. Panel state stays readable in `/sys/class/drm/card0-DSI-1/dpms`.
+- Wayfire IPC: the session sets `_WAYFIRE_SOCKET=/run/user/1000/wayfire-session.socket`. A second Wayfire on the default path unlinks the socket of the first.
+- WLAN firmware restarts: "Received DEAUTH, reason = 7" after `WIFI_EVENT_ROAM_SEARCH_STARTED`, then a minimoredump, every few minutes on the test hotspot. NCHO mode resets at each association, so the dispatcher sets the roam limits again at `dhcp4-change`. Effect on the drops is not proven yet.
+- Output scale 1.5: Qt 6.4 and GTK 3 have no fractional scale, they draw at scale 2 and the compositor scales down. On gradients this gives a grid of stripes, so the wallpaper is drawn in the compositor at panel pixels. GTK 4 uses `GDK_DEBUG=gl-fractional`.

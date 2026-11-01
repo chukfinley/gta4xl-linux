@@ -1,6 +1,6 @@
 # Project status
 
-Date of this state: 2026-11-01, 17:55. Update this file at each milestone.
+Date of this state: 2026-11-01, 22:50. Update this file at each milestone.
 
 ## Device
 
@@ -27,6 +27,6 @@ User login steps are open for Signal, Jellyfin, Thunderbird and the Nextcloud ca
 
 ## Desktop
 
-Tablet Shell (`~/git/tablet-shell`, not published) is the desktop. See `docs/status.md`, `docs/performance.md` and `docs/HANDOVER.md` in that repo.
+The tablet boots into the Wayfire desktop (`~/git/tablet-desktop`, not published): `tablet-session.service`, Wayfire 0.9.0 in `/opt/wayfire`, plugin and clients in `/opt/tablet-desktop`. State and open list: `docs/status.md` in that repo.
 
-Open list: live resize on the tablet, app switch time, window controls of Electron apps, 8 items of the iPadOS spec, test of each control, then an independent check.
+Way back to GNOME: `/usr/local/sbin/session-gnome.sh`. GNOME packages are still on disk.
