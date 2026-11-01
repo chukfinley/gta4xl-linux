@@ -520,10 +520,10 @@ index 0b0b0a96e..d58c3e671 100644
  	int ret;
 diff --git a/drivers/video/fbdev/exynos/dpu20/decon_kms.c b/drivers/video/fbdev/exynos/dpu20/decon_kms.c
 new file mode 100644
-index 000000000..df3b87514
+index 000000000..7ad8088cd
 --- /dev/null
 +++ b/drivers/video/fbdev/exynos/dpu20/decon_kms.c
-@@ -0,0 +1,543 @@
+@@ -0,0 +1,535 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Minimal DRM/KMS front end for the Exynos DPU20 DECON fbdev driver.
@@ -549,10 +549,6 @@ index 000000000..df3b87514
 +
 +#include "decon.h"
 +#include "dsim.h"
-+
-+static bool swap_rb;
-+module_param(swap_rb, bool, 0644);
-+MODULE_PARM_DESC(swap_rb, "Swap red and blue channels on scanout");
 +
 +struct dk_device {
 +	struct drm_device *drm;
@@ -741,27 +737,23 @@ index 000000000..df3b87514
 +
 +static int dk_format(u32 drm_format, enum decon_pixel_format *out)
 +{
-+	bool bgr;
-+
++	/*
++	 * DECON names a 32-bit word from the top byte, like DRM. Test pattern on the panel with
++	 * RGBX for XRGB8888 gave red -> yellow, green -> magenta, blue -> red: the bytes were
++	 * shifted and the constant X byte landed in a colour channel.
++	 */
 +	switch (drm_format) {
 +	case DRM_FORMAT_XRGB8888:
 +	case DRM_FORMAT_ARGB8888:
-+		bgr = true;
-+		break;
++		*out = DECON_PIXEL_FORMAT_XRGB_8888;
++		return 0;
 +	case DRM_FORMAT_XBGR8888:
 +	case DRM_FORMAT_ABGR8888:
-+		bgr = false;
-+		break;
++		*out = DECON_PIXEL_FORMAT_XBGR_8888;
++		return 0;
 +	default:
 +		return -EINVAL;
 +	}
-+
-+	if (swap_rb)
-+		bgr = !bgr;
-+
-+	/* DECON names follow memory byte order, DRM names a little-endian word */
-+	*out = bgr ? DECON_PIXEL_FORMAT_BGRX_8888 : DECON_PIXEL_FORMAT_RGBX_8888;
-+	return 0;
 +}
 +
 +static void dk_scanout(struct dk_device *dk, struct drm_framebuffer *fb)
