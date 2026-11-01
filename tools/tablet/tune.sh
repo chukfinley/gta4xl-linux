@@ -62,3 +62,6 @@ PY
 rm -f /home/user/.config/autostart/mattermost-desktop.desktop
 D=/usr/share/applications/mattermost-desktop.desktop
 [ -f "$D" ] && sed -i -E "/ --use-angle=gles/! s#^(Exec=.*) %U#\1 --ozone-platform=wayland --enable-wayland-ime $GPU %U#" "$D"
+# GNOME Settings hits a NULL back image in Panfork on the app details page. It needs no GPU.
+sed -i 's#^Exec=gnome-control-center#Exec=env GSK_RENDERER=cairo gnome-control-center#' /usr/share/applications/org.gnome.Settings.desktop
+sed -i 's#^Exec=/usr/bin/gnome-control-center#Exec=/usr/bin/env GSK_RENDERER=cairo /usr/bin/gnome-control-center#' /usr/share/dbus-1/services/org.gnome.Settings.service
