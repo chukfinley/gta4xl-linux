@@ -1,0 +1,4 @@
+/* Neutral accent for libadwaita apps, GNOME 46 has no accent setting */
+@define-color accent_color #d0d0d4;
+@define-color accent_bg_color #6b6b70;
+@define-color accent_fg_color #ffffff;

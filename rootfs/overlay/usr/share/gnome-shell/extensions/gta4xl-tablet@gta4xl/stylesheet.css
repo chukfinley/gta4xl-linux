@@ -1,0 +1,16 @@
+/* GNOME 46 has a fixed blue accent. This keeps the normal dark theme with a neutral grey. */
+.quick-toggle:checked,
+.quick-toggle-arrow:checked,
+.quick-menu-toggle .quick-toggle:checked,
+.quick-menu-toggle .quick-toggle-arrow:checked,
+.button.default,
+.modal-dialog-button:default,
+.switch:checked,
+.toggle-switch:checked { background-color: #6b6b70; color: #ffffff; }
+.quick-toggle:checked:hover,
+.quick-toggle-arrow:checked:hover,
+.button.default:hover { background-color: #7c7c82; }
+.slider { -slider-active-background-color: #d0d0d4; }
+.keyboard-key.enter-key,
+.keyboard-key.default-key { background-color: #6b6b70; }
+.ws-tmb:active, .workspace-thumbnail-indicator { border-color: #d0d0d4; }
