@@ -1,8 +1,7 @@
 [Unit]
 Description=Tablet desktop session on Wayfire
 After=systemd-user-sessions.service tablet-sched.service dbus.socket
-Conflicts=gdm.service getty@tty7.service
-OnFailure=tablet-session-fallback.service
+Conflicts=getty@tty7.service
 StartLimitIntervalSec=60
 StartLimitBurst=4
 
