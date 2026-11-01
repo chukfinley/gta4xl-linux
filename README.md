@@ -24,10 +24,11 @@ are not tested. You do this at your own risk.
 | Bluetooth (BlueZ, A2DP) | works, SBC codec |
 | Sensor hub, auto rotation | works |
 | Pen | detected by libinput, test open |
-| Audio | Bluetooth A2DP works. Speaker route tool exists, test open |
+| Audio | Bluetooth A2DP works. Speaker sink in PipeWire with GNOME volume, jack route. Confirmation by ear open. No microphone |
+| Video | mpv and Celluloid, 1080p30 H.264 on Panfork with no dropped frames, large touch controls in mpv |
 | GPU (Mali-G72) | Panfork clears at 600 FPS, draws still hang. GNOME runs on software rendering |
 | Suspend | does not resume, disabled |
-| Hardware video decode | open, software decode handles 1080p |
+| Hardware video decode | not with ffmpeg, the MFC driver has no MMAP buffers and no V4L2 events. Software decode handles 1080p |
 | USB network | does not work, disabled. USB serial console works |
 
 Details and test results: [docs/gta4xl.md](docs/gta4xl.md).
@@ -54,8 +55,8 @@ The firmware comes from your own tablet. Samsung files are not part of this repo
 5. Start normally. The tablet logs in and locks at once. PIN `1234`, it is the password of `user`.
 
 After the first boot, new kernels install from Ubuntu with `tools/deploy-kernel.sh`.
-Run `tools/tablet/tune.sh`, `tools/tablet/install-apps.sh` and `tools/tablet/t3-service.sh` on the
-tablet as root. `tools/tablet/build-panfork.sh` builds the GPU driver on the tablet.
+Run `tools/tablet/tune.sh`, `tools/tablet/install-apps.sh`, `tools/tablet/t3-service.sh` and
+`tools/tablet/media-setup.sh` on the tablet as root. `tools/tablet/build-panfork.sh` builds the GPU driver on the tablet.
 
 ## Publish
 

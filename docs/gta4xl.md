@@ -190,3 +190,59 @@ Chromium (Brave, Electron): its Wayland GPU process needs a GBM device on a DRM 
 decon-kms has no render node, so shared images fail and the GPU process restarts in a loop
 ("Cannot create bo with format=RGBA_8888"). Brave under Xwayland with ANGLE probably reset the
 tablet (no panic text). Brave and T3 Code use `--disable-gpu` until that works.
+
+## Audio
+
+Card 0 is the ABOX DSP with the RT5665 (headphone, UAIF0) and two TAS2562 amps (speaker, UAIF2).
+
+- EBUSY from `aplay` did not come from a process. `fuser` shows nothing. The DSP was off:
+  "Invalid calliope state: 0". The driver requests `calliope_sram.bin` in the probe, when only the
+  initramfs exists. Android serves the file through ueventd. `abox.c` now tries again every 3 s.
+  Check: dmesg "Calliope is ready to sing", about 5.6 s after boot.
+- After the DSP boot, the driver adds card `abox_dump`. Its `dma_area` is device memory.
+  `snd_pcm_hw_params` cleared it with `memset`, and DC ZVA on device memory gives an alignment
+  fault. WirePlumber opened the card 1.5 s after the boot of the DSP and the kernel panicked.
+  `pcm_native.c` now uses `memset_io`. The firmware fix must not ship without this fix.
+- PipeWire ignores all three cards through `ACP_IGNORE` in `60-gta4xl-audio.rules`, because ACP
+  finds no usable profile. The sink is a fixed node on `hw:0,0`, see `50-gta4xl-speaker.conf`.
+- Keep `api.alsa.period-num` at 8. With 32 periods of 1024 frames PipeWire restarts the PCM every
+  0.3 s. `abox_rdma_pointer` probably causes this. Not analysed further.
+- Android route: RDMA0 goes through the DSM of the DSP to RDMA7, SIFS1, UAIF2. The DSP owns RDMA7,
+  and `aplay` on hw:0,7 ends with EIO. Linux uses RDMA0, SPUS, SIFS0, UAIF2 and no DSM.
+- There is no speaker protection on this path. `gta4xl-audio` sets Amp Output Level to 2
+  (12 dBV full scale). Android uses 20 (21 dBV) behind the DSM. Do not raise it without the DSM.
+- `gta4xl-audio` follows the input "Exynos9610-Audio Headset Jack" and selects UAIF2 or UAIF0.
+  Route change during playback: tested with the command, no plug test yet.
+- Capture on WDMA3 and WDMA4 (hw:0,11, hw:0,12) ends with EIO after 1 s. So there is no microphone
+  and no IV sense measurement. Card 1 is the voice wake chip.
+- Checks without ears: `/proc/asound/card0/pcm0p/sub0/status` RUNNING and hw_ptr at 48000/s. dmesg
+  "tas2562_mute,0", "IRQ status : 0x0". The close of the PCM 3 s after the end of playback.
+
+A test module that calls kernel functions by kallsyms name needs care here: the two test loads
+of 2026-11-01 each caused a panic and a restart before the cause was clear. Panic text:
+`/proc/last_kmsg`.
+
+## Video
+
+- `h264_v4l2m2m` did not hang in the MFC. ffmpeg scans all `/dev/video*`, and the fimc-is stubs
+  return 0 with no format for each index, so the loop did not end. `v4l2-ioctl.c` now returns
+  EINVAL. This also stopped most `v4l_enum_fmt` warnings. ffmpeg now fails after 0.3 s.
+- The MFC firmware (v12.2) loads, but ffmpeg cannot use the driver. `mfc_dec_reqbufs` refuses
+  V4L2_MEMORY_MMAP, and VIDIOC_SUBSCRIBE_EVENT does not exist. The driver expects DMABUF from
+  ION and the flow of the Samsung HAL. This is a large job, so it stops here.
+- mpv needs Panfork: `vo=gpu` gives 1080p30 with 0 to 2 dropped frames. `vo=wlshm` drops half of
+  the frames. Celluloid uses about 170 % CPU on the same file.
+- `tools/tablet/media-setup.sh` installs uosc 5.13.0 and rtkit. Options: `/etc/mpv`.
+
+## Battery and idle
+
+- UPower: 29.9 Wh, correct percent, state and time to full. Discharge time not tested.
+- CPU idle works: more than 96 % of the time in the deep state on both clusters.
+- Load average 16 on an idle tablet is no CPU work. About 16 TEE kernel threads stay in D state.
+- Idle: 450 interrupts/s and 400 context switches/s. i2c 13840000 (charger, fuel gauge) gives 45/s
+  on the charger. DECON gives no interrupts while nothing changes on the panel.
+- `kernel.printk` is already 4, and the console goes only to RAM. A change has no effect.
+- journald woke for each kernel line, so `ReadKMsg=no`. Use `dmesg`. The WirePlumber v4l2 and
+  libcamera monitors are off, because 45 dead camera nodes gave log noise on each scan.
+- `tools/deploy-kernel.sh` now does the writes in a unit on the tablet. A lost SSH session in the
+  middle of dd would leave a broken boot partition.
