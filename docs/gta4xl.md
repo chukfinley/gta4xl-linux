@@ -242,6 +242,20 @@ switches the panel on. Key presses in the next 3 s are ignored, because the pres
 tablet arrives as an input event. `sleep.target` and `suspend.target` are unmasked, the hibernate
 targets stay masked.
 
+Mutter wakes on any input, also on the release of a key. So the daemon acts on the release, and it
+reads the panel state at the press from `/sys/class/drm/card0-DSI-1/dpms`. A D-Bus call at the press
+already sees the state after the wake. The key test without hands: write `EV_KEY` 116 to the
+`gpio_keys` event node, evdev delivers it to the readers.
+
+Test without hands: `batt_slate_mode` 1 stops charging, the status is then Discharging and the
+daemon path runs.
+
+Results on 2026-11-01: 5 of 5 cycles of `systemctl suspend` with 30 s RTC wake, while Brave played
+1080p video. After each cycle: `suspend_stats` fail 0, WLAN connected, panel at 120 interrupts/s,
+0 GPU faults, all CPUs online, Brave GPU process alive. The daemon path worked once with the
+panel off on battery, the panel came back on after resume. Power key wake is not tested, that
+needs hands.
+
 Wake sources: Power (`gpio-key,wakeup` in the DT, `gpio_keys` simulates the press), PMIC RTC. Check
 after a sleep: `dmesg | grep "Resume caused"`, `/sys/power/suspend_stats`.
 

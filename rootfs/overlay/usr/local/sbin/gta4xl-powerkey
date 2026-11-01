@@ -25,7 +25,7 @@ PATH = ["org.gnome.Mutter.DisplayConfig", "/org/gnome/Mutter/DisplayConfig",
         "org.gnome.Mutter.DisplayConfig", "PowerSaveMode"]
 BATTERY = "/sys/class/power_supply/battery/status"
 SLEEP_AFTER = 120
-TICK = 15
+TICK = 20
 # The key press that ended sleep arrives after the resume signal, it must not switch the panel off
 RESUME_GUARD = 3
 
@@ -50,29 +50,34 @@ def shell():
     return (user, bus) if bus else None
 
 
+def run_as(user, cmd, **env):
+    """Without PAM, runuser writes two log lines for each call."""
+    return subprocess.run(cmd, user=user, group=user, extra_groups=[], env=env,
+                          capture_output=True, text=True).stdout
+
+
 def busctl(user, bus, *args):
-    return subprocess.run(["runuser", "-u", user, "--", "env", f"DBUS_SESSION_BUS_ADDRESS={bus}",
-                           "busctl", "--user", *args], capture_output=True, text=True).stdout
+    return run_as(user, ["busctl", "--user", *args], DBUS_SESSION_BUS_ADDRESS=bus)
 
 
-def panel_mode(target):
-    """Mutter PowerSaveMode, 0 is on. None if mutter does not answer."""
-    mode = busctl(*target, "get-property", *PATH).split()
-    return int(mode[1]) if len(mode) == 2 else None
+def panel_on():
+    """From the connector: a D-Bus call after a key press sees the state after mutter woke up."""
+    return open(glob.glob("/sys/class/drm/card0-*/dpms")[0]).read().strip() == "On"
 
 
 def set_panel(target, touch, on):
     busctl(*target, "set-property", *PATH, "i", "0" if on else "3")
     # mutter wakes up on any input: a touch in the bag must not switch the panel on
-    fcntl.ioctl(touch, EVIOCGRAB, 0 if on else 1)
+    try:
+        fcntl.ioctl(touch, EVIOCGRAB, 0 if on else 1)
+    except OSError:
+        pass  # It already has this state: the panel also goes off through GNOME
     if not on:
         subprocess.run(["loginctl", "lock-sessions"])
 
 
 def audio_active():
-    out = subprocess.run(["runuser", "-u", "user", "--", "env", "XDG_RUNTIME_DIR=/run/user/1000",
-                          "wpctl", "status"], capture_output=True, text=True).stdout
-    return "[active]" in out
+    return "[active]" in run_as("user", ["wpctl", "status"], XDG_RUNTIME_DIR="/run/user/1000")
 
 
 def sleep_blocked():
@@ -98,14 +103,15 @@ def main():
 
     off_since = None
     resumed = 0.0
+    was_on = None
     while True:
         ready = select.select([key, wake_r], [], [], TICK)[0]
-        target = shell()
 
         if wake_r in ready:
             os.read(wake_r, 64)
             resumed = time.monotonic()
             off_since = None
+            target = shell()
             if target:
                 set_panel(target, touch, True)
 
@@ -113,12 +119,20 @@ def main():
             data = os.read(key, EVENT.size * 16)
             for offset in range(0, len(data), EVENT.size):
                 _, _, typ, code, value = EVENT.unpack_from(data, offset)
-                if typ == EV_KEY and code == KEY_POWER and value == 1 and target and \
-                        time.monotonic() - resumed > RESUME_GUARD:
-                    set_panel(target, touch, panel_mode(target) != 3)
+                if typ != EV_KEY or code != KEY_POWER or time.monotonic() - resumed < RESUME_GUARD:
+                    continue
+                if value == 1:
+                    was_on = panel_on()
+                elif value == 0 and was_on is not None:
+                    # On release: mutter also wakes on the release, after the panel went off
+                    time.sleep(0.1)
+                    target = shell()
+                    if target:
+                        set_panel(target, touch, not was_on)
+                    was_on = None
             continue
 
-        if not target or panel_mode(target) in (0, None):
+        if panel_on():
             off_since = None
             continue
         off_since = off_since or time.monotonic()

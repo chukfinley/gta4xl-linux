@@ -1192,7 +1192,7 @@ index 000000000..3672d68ae
 +}
 +late_initcall(decon_kms_init);
 diff --git a/drivers/watchdog/s3c2410_wdt.c b/drivers/watchdog/s3c2410_wdt.c
-index ae12d7313..9c832f39c 100644
+index ae12d7313..8952c6d3c 100644
 --- a/drivers/watchdog/s3c2410_wdt.c
 +++ b/drivers/watchdog/s3c2410_wdt.c
 @@ -841,6 +841,9 @@ int s3c2410wdt_keepalive_emergency(bool reset, int index)
@@ -1218,8 +1218,8 @@ index ae12d7313..9c832f39c 100644
  		return -ENODEV;
  
 +	/*
-+	 * The freezer calls this after each freeze. A watchdog that nobody started has count 0,
-+	 * and its interrupt holds CPU0 in firmware 16 s later: hard lockup "IDLE STUCK".
++	 * The freezer calls this after each freeze. A watchdog that nobody started has count 0
++	 * and nobody serves it: CPU0 then hangs about 16 s later, hard lockup "IDLE STUCK".
 +	 */
 +	if (!multistage_wdt_was_on)
 +		return 0;
