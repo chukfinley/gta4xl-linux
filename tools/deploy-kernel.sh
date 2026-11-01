@@ -5,7 +5,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 IMAGES="${IMAGES:-/mnt/data/android-linux/out/images}"
 BACKUP="${BACKUP:-/mnt/data/android-linux/backup/partitions}"
-IP="${GTA4XL_IP:-10.42.0.125}"
+IP="${GTA4XL_IP:-gta4xl}"
 SSHOPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR)
 
 python3 -I "$HERE/tools/mk-vbmeta.py" "$BACKUP/vbmeta.img" "$IMAGES/vbmeta-linux.img" \

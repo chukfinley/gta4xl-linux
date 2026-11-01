@@ -61,3 +61,8 @@ Run `tools/tablet/tune.sh`, `tools/tablet/install-apps.sh`, `tools/tablet/t3-ser
 ## Publish
 
 `tools/publish-github.sh NAME` creates a private repository, add `--public` for a public one.
+
+## License
+
+The kernel patch is GPL-2.0, as the kernel. The Panfork patch is MIT, as Mesa. The scripts and the
+GNOME extension are MIT. Firmware belongs to Samsung and is not part of this repository.

@@ -94,7 +94,7 @@ The LineageOS recovery entry "Reboot to bootloader" is a fastbootd that accepts 
 
 ## Test tools
 
-- `tools/tab CMD`: root shell on the tablet over WLAN. Hotspot HIBY on the PC, tablet 10.42.0.125.
+- `tools/tab CMD`: root shell on the tablet over Tailscale, host name `gta4xl`.
 - `tools/tab-shot`: DRM framebuffer to `_scratch/screen.png`, works under Wayland.
 - `tools/tab-tap.py X Y`: inject a touch tap into `/dev/input/event1`.
 - `tools/tty-run.py`, `tools/tty-push.py`: command and file over the USB serial console.
@@ -332,3 +332,11 @@ of 2026-11-01 each caused a panic and a restart before the cause was clear. Pani
   libcamera monitors are off, because 45 dead camera nodes gave log noise on each scan.
 - `tools/deploy-kernel.sh` now does the writes in a unit on the tablet. A lost SSH session in the
   middle of dd would leave a broken boot partition.
+
+## Access and security
+
+- sshd takes keys only and accepts connections from 100.64.0.0/10 only. Tailscale SSH is off, the
+  default tailnet policy asks for an interactive check. Serial console has no auto login.
+- The session starts with auto login and locks at once. The PIN pad of the extension sends the
+  digits to the normal password prompt. Default PIN: `1234`, the password of `user`.
+- The disk is not encrypted and the bootloader is unlocked: physical access gives access to data.

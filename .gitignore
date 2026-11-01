@@ -8,3 +8,7 @@ _scratch/
 work
 session.txt
 initramfs/reboot-to
+.beads/interactions.jsonl
+.claude/
+.codex/
+.agents/

@@ -2,4 +2,4 @@
 # Screenshot of the tablet into _scratch/screen.png, read from the DRM framebuffer.
 cd "$(dirname "$0")/.." || exit 1
 tools/tab 'tab-drmshot /run/s.ppm >/dev/null && convert /run/s.ppm -resize 50% /run/s.png'
-scp -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "root@${GTA4XL_IP:-10.42.0.125}:/run/s.png" _scratch/screen.png
+scp -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "root@${GTA4XL_IP:-gta4xl}:/run/s.png" _scratch/screen.png
