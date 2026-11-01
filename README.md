@@ -22,6 +22,7 @@ are not tested. You do this at your own risk.
 | Battery | percent and time estimate through UPower |
 | SD card | works, ext4 on /media/sd |
 | Tailscale, Brave, T3 Code, Claude and Codex CLI | work |
+| Spotify (Brave web app with Widevine), Thunderbird with calendar, Signal, Jellyfin, 0 A.D. | start and open a window, see docs. Spotify login and playback open |
 | WLAN | works |
 | Bluetooth (BlueZ, A2DP) | keyboard works, buds drop the link after seconds, see docs |
 | Sensor hub, auto rotation | works |

@@ -226,6 +226,49 @@ Test notes:
 - Tests over CDP: `ssh -L 9222:127.0.0.1:9222`, `--remote-debugging-port=9222`, `SystemInfo.getInfo`,
   `Page.captureScreenshot`, `getVideoPlaybackQuality()`.
 
+## More apps
+
+`tools/tablet/more-apps.sh` installs the apps below. You can run it again. No app has autostart or a
+background service.
+
+Flatpak:
+- This kernel calls `sget()` in `proc_mount`, so a proc mount in a new user and PID namespace gives
+  EBUSY. Each `flatpak run` as `user` failed. `/usr/bin/bwrap` is now setuid, set with
+  `dpkg-statoverride`. The kernel fix is `sget_userns()` with `ns->user_ns`, then remove the bit.
+- The runtimes have no Panfork, and the session variables point at `/opt/panfork`. A global override
+  removes these variables, sets `LIBGL_ALWAYS_SOFTWARE=1` and `GSK_RENDERER=cairo`, and removes
+  `dri`, `x11` and `fallback-x11`. All Flatpak apps render on the CPU, on Wayland only.
+- Flathub has no aarch64 Thunderbird. `dev.alextren.Spot` is end-of-life.
+
+Apps, tested on 2026-11-01:
+- Spotify: `/usr/local/bin/spotify-web`, Brave `--app` with its own profile in
+  `~/.local/share/spotify-web`, on the GPU. App id: `brave-open.spotify.com__-Default`.
+- Widevine: `widevine-installer` of Asahi Linux, version 4.10.2662.3, in `/var/lib/widevine`. Brave
+  ignores a CDM in its install directory. It needs the file
+  `WidevineCdm/latest-component-updated-widevine-cdm` in the profile and
+  `brave.widevine_opted_in` in `Local State`. The launcher writes both.
+- Test with the Shaka Widevine demo in this profile: license received, 12 s played, 303 frames, 0
+  dropped. Real Spotify playback needs a login and is not tested.
+- Load in this profile, sum of all processes. Page idle: PSS 419 MB, 14 % of one core. Widevine audio
+  only: PSS 480 MB, 43 %. Audio and video: PSS 451 MB, 99 %.
+- Audio with the panel off: 100 s with the stream active, no suspend. `gta4xl-powerkey` does not
+  suspend while `wpctl status` shows `[active]`. The test did not reach the 120 s limit.
+- MPRIS: `org.mpris.MediaPlayer2.brave.instanceN` reports Playing and Pause works. A uinput
+  `KEY_PLAYPAUSE` starts playback through gsd-media-keys.
+- Thunderbird 140: Mozilla Team PPA with an APT pin, real arm64 deb, on Panfork. It also gives the
+  calendar: `gnome-calendar` needs `evolution-data-server` and `goa-daemon`, so it is removed. The
+  entry `thunderbird-calendar.desktop` runs `thunderbird -calendar`.
+- Signal 8.33: Flatpak, `--disable-gpu`, plain password store because there is no keyring.
+- Jellyfin Desktop 2.0: Flatpak, llvmpipe. QtWebEngine stops with a setuid bwrap, so
+  `QTWEBENGINE_DISABLE_SANDBOX=1`. It needs Qt Quick on GL for mpv, so no `QT_QUICK_BACKEND`.
+- 0 A.D. 0.0.26: apt, Panfork, `SDL_VIDEODRIVER=wayland` in the desktop file.
+
+Test notes:
+- `--user-data-dir` is not a separate word in `/proc/PID/cmdline` of Brave, the main process joins
+  its arguments. Do not match the full line.
+- Brave exits with code 0 when the compositor goes away, this is no Brave fault.
+- A new `systemd-run --user` unit has no `WAYLAND_DISPLAY`. Set it with `-E`.
+
 ## System sleep
 
 Deep sleep works, PSCI and resume on this kernel are fine. Three problems hid that.
