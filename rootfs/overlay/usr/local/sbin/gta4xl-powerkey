@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+"""Short press on Power switches the panel off and on through mutter.
+
+logind ignores the key and gsd-power has no such action. Works on the greeter too: the greeter
+runs on a private session bus, so the bus address comes from the gnome-shell environment.
+"""
+import glob
+import struct
+import subprocess
+
+KEY_POWER = 116
+EV_KEY = 1
+PATH = ["org.gnome.Mutter.DisplayConfig", "/org/gnome/Mutter/DisplayConfig",
+        "org.gnome.Mutter.DisplayConfig", "PowerSaveMode"]
+
+
+def gpio_keys():
+    for path in glob.glob("/sys/class/input/event*/device/name"):
+        if open(path).read().strip() == "gpio_keys":
+            return "/dev/input/" + path.split("/")[4]
+    raise SystemExit("gpio_keys not found")
+
+
+def shell():
+    """(user, bus address) of the gnome-shell on the active seat session."""
+    out = subprocess.run(["pgrep", "-n", "-x", "gnome-shell"], capture_output=True, text=True)
+    pid = out.stdout.strip()
+    if not pid:
+        return None
+    env = open(f"/proc/{pid}/environ", "rb").read().split(b"\0")
+    bus = next((e[len(b"DBUS_SESSION_BUS_ADDRESS="):].decode() for e in env
+                if e.startswith(b"DBUS_SESSION_BUS_ADDRESS=")), None)
+    user = subprocess.run(["ps", "-o", "user=", "-p", pid], capture_output=True, text=True).stdout.strip()
+    return (user, bus) if bus else None
+
+
+def busctl(user, bus, *args):
+    return subprocess.run(["runuser", "-u", user, "--", "env", f"DBUS_SESSION_BUS_ADDRESS={bus}",
+                           "busctl", "--user", *args], capture_output=True, text=True).stdout
+
+
+def toggle():
+    target = shell()
+    if not target:
+        return
+    user, bus = target
+    mode = busctl(user, bus, "get-property", *PATH).split()
+    value = "0" if len(mode) == 2 and mode[1] != "0" else "3"
+    busctl(user, bus, "set-property", *PATH, "i", value)
+
+
+def main():
+    with open(gpio_keys(), "rb") as dev:
+        while True:
+            _, _, typ, code, value = struct.unpack("qqHHi", dev.read(24))
+            if typ == EV_KEY and code == KEY_POWER and value == 1:
+                toggle()
+
+
+if __name__ == "__main__":
+    main()

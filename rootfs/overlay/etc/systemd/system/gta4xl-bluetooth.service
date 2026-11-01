@@ -1,0 +1,16 @@
+[Unit]
+Description=Register the SCSC Bluetooth controller with BlueZ
+Before=bluetooth.service
+After=sys-module-scsc_bt.device
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# The driver has no rfkill in this kernel, so userspace starts the HCI device
+ExecStart=/bin/sh -c 'echo 1 > /sys/module/scsc_bt/parameters/power_control'
+# hci_register_dev runs in a worker, bluetooth.service needs the device
+ExecStart=/bin/sh -c 'for i in 1 2 3 4 5 6 7 8 9 10; do [ -e /sys/class/bluetooth/hci0 ] && exit 0; sleep 0.5; done'
+
+[Install]
+WantedBy=bluetooth.target
+RequiredBy=bluetooth.service

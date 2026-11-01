@@ -1,0 +1,1 @@
+{"id":"int-115534cbec84edbf1988e67fe2339a0b","kind":"field_change","created_at":"2026-10-14T23:09:23.060697611Z","actor":"chukfinley","issue_id":"android-linux-bzq.2","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Kernel 4.14.356 baut mit Desktop-Config, BlueZ, VT; BT-Stack aus Vanilla wiederhergestellt"}}

@@ -1,0 +1,163 @@
+#!/bin/busybox sh
+# gta4xl Linux initramfs: USB debug gadget, then switch_root into LABEL=gta4xl-root.
+#
+# Stays in the debug shell when:
+#   - no rootfs labelled gta4xl-root is found
+#   - the kernel cmdline contains gta4xl.debug
+#   - the rootfs contains /etc/gta4xl/initramfs-debug
+#
+# The gadget stays bound across switch_root, so the PC sees the tablet even when systemd hangs.
+# Files in /overlay are copied onto the rootfs at each boot. This updates the rootfs with a
+# boot.img flash only, which is the way in while there is no working SSH.
+
+/bin/busybox --install -s /bin
+export PATH=/bin
+
+mkdir -p /proc /sys /dev /run /tmp /newroot
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+mkdir -p /dev/pts
+mount -t devpts devpts /dev/pts
+mount -t configfs configfs /sys/kernel/config
+mount -t tmpfs tmpfs /run
+
+log() {
+	echo "initramfs: $*" > /dev/kmsg
+	echo "initramfs: $*" > /dev/tty0 2>/dev/null
+}
+
+GADGET=/sys/kernel/config/usb_gadget/g1
+HOST_IP=172.16.42.2
+DEV_IP=172.16.42.1
+
+wait_for() {
+	n=0
+	while [ ! -e "$1" ] && [ $n -lt "$2" ]; do
+		sleep 0.1
+		n=$((n + 1))
+	done
+	[ -e "$1" ]
+}
+
+usb_gadget_up() {
+	mkdir -p $GADGET/strings/0x409 $GADGET/configs/c.1/strings/0x409
+	echo 0x18d1 > $GADGET/idVendor
+	echo 0xd001 > $GADGET/idProduct
+	echo "gta4xl-linux" > $GADGET/strings/0x409/serialnumber
+	echo "Samsung" > $GADGET/strings/0x409/manufacturer
+	echo "Galaxy Tab S6 Lite (Linux initramfs)" > $GADGET/strings/0x409/product
+	echo "debug" > $GADGET/configs/c.1/strings/0x409/configuration
+	echo 500 > $GADGET/configs/c.1/MaxPower
+
+	# Samsung's NCM never transmits; ECM with fixed MACs keeps the host interface name stable
+	mkdir -p $GADGET/functions/ecm.usb0 $GADGET/functions/acm.usb0
+	echo 02:47:54:41:34:01 > $GADGET/functions/ecm.usb0/dev_addr
+	echo 02:47:54:41:34:02 > $GADGET/functions/ecm.usb0/host_addr
+	ln -s $GADGET/functions/ecm.usb0 $GADGET/configs/c.1/
+	ln -s $GADGET/functions/acm.usb0 $GADGET/configs/c.1/
+
+	# Only in the debug shell, never while the rootfs is mounted here:
+	# export userdata (the Linux rootfs partition) so the PC can write images to it
+	if [ "$1" = "storage" ]; then
+		data=""
+		for p in /sys/block/sda/sda*; do
+			grep -q "^PARTNAME=userdata$" "$p/uevent" 2>/dev/null && data=/dev/${p##*/}
+		done
+		if [ -n "$data" ] && wait_for "$data" 50; then
+			mkdir -p $GADGET/functions/mass_storage.0
+			echo 0 > $GADGET/functions/mass_storage.0/lun.0/cdrom
+			echo 0 > $GADGET/functions/mass_storage.0/lun.0/ro
+			echo 1 > $GADGET/functions/mass_storage.0/lun.0/removable
+			echo "$data" > $GADGET/functions/mass_storage.0/lun.0/file
+			ln -s $GADGET/functions/mass_storage.0 $GADGET/configs/c.1/
+		fi
+	fi
+
+	udc=""
+	n=0
+	while [ -z "$udc" ] && [ $n -lt 100 ]; do
+		udc=$(ls /sys/class/udc 2>/dev/null | head -n 1)
+		[ -z "$udc" ] && sleep 0.1
+		n=$((n + 1))
+	done
+	if [ -z "$udc" ]; then
+		log "no USB device controller found"
+		return 1
+	fi
+	echo "$udc" > $GADGET/UDC
+	log "USB gadget bound to $udc"
+
+	# Ubuntu starts its own shell and network on this gadget
+	[ "$1" = "storage" ] || return 0
+
+	(
+		while true; do
+			wait_for /dev/ttyGS0 50 && setsid sh -c 'exec sh -i </dev/ttyGS0 >/dev/ttyGS0 2>&1'
+			sleep 1
+		done
+	) &
+
+	IFACE=$(cat $GADGET/functions/ecm.usb0/ifname 2>/dev/null)
+	[ -n "$IFACE" ] && [ "$IFACE" != "(unnamed net_device)" ] || IFACE=usb0
+	n=0
+	while ! ip link show "$IFACE" >/dev/null 2>&1 && [ $n -lt 50 ]; do
+		sleep 0.1
+		n=$((n + 1))
+	done
+	ip addr add $DEV_IP/24 dev $IFACE
+	ip link set $IFACE up
+	log "network on $IFACE: $(ip -o addr show dev $IFACE 2>&1 | head -n 1)"
+	log "interfaces: $(ls /sys/class/net | tr '\n' ' ')"
+
+	cat > /run/udhcpd.conf <<-EOF
+	start $HOST_IP
+	end $HOST_IP
+	interface $IFACE
+	max_leases 1
+	lease_file /run/udhcpd.leases
+	option subnet 255.255.255.0
+	EOF
+	touch /run/udhcpd.leases
+	udhcpd /run/udhcpd.conf
+	telnetd -b $DEV_IP:23 -l /bin/sh
+	log "telnet $DEV_IP"
+}
+
+log "gta4xl Linux initramfs, kernel $(uname -r)"
+
+ROOT=""
+n=0
+while [ -z "$ROOT" ] && [ $n -lt 30 ]; do
+	ROOT=$(findfs LABEL=gta4xl-root 2>/dev/null)
+	[ -z "$ROOT" ] && sleep 0.2
+	n=$((n + 1))
+done
+
+debug=0
+grep -q "gta4xl.debug" /proc/cmdline && debug=1
+
+if [ -n "$ROOT" ] && [ $debug -eq 0 ]; then
+	log "rootfs on $ROOT"
+	mount -o rw,noatime "$ROOT" /newroot
+	if [ -e /newroot/etc/gta4xl/initramfs-debug ]; then
+		log "debug marker present, staying in initramfs"
+		umount /newroot
+	elif [ -x /newroot/sbin/init ] || [ -L /newroot/sbin/init ]; then
+		umount /run
+		mount --move /dev /newroot/dev
+		mount --move /proc /newroot/proc
+		mount --move /sys /newroot/sys
+		exec switch_root /newroot /sbin/init
+	else
+		log "no /sbin/init on $ROOT"
+		umount /newroot
+	fi
+fi
+
+usb_gadget_up storage
+log "debug shell: telnet $DEV_IP (USB), SD card and internal storage exported as USB drives"
+while true; do
+	setsid cttyhack sh -l < /dev/tty1 > /dev/tty1 2>&1
+	sleep 1
+done

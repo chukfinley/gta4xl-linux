@@ -1,0 +1,7 @@
+#!/bin/sh
+# reboot-to download|recovery: clean shutdown, then let the Samsung bootloader pick the mode.
+if [ -z "$1" ]; then
+	echo "usage: reboot-to <download|recovery|bootloader>" >&2
+	exit 1
+fi
+exec systemctl reboot --reboot-argument="$1"

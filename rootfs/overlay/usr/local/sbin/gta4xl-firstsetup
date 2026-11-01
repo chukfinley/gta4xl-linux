@@ -1,0 +1,58 @@
+#!/bin/sh
+# Runs once inside the rootfs chroot at build time.
+set -e
+
+echo gta4xl > /etc/hostname
+cat > /etc/hosts <<EOF
+127.0.0.1	localhost
+127.0.1.1	gta4xl
+::1		localhost ip6-localhost ip6-loopback
+EOF
+
+sed -i 's/^# *de_DE.UTF-8/de_DE.UTF-8/; s/^# *en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen
+locale-gen
+echo 'LANG=de_DE.UTF-8' > /etc/default/locale
+ln -sf /usr/share/zoneinfo/Europe/Berlin /etc/localtime
+echo Europe/Berlin > /etc/timezone
+
+cat > /etc/default/keyboard <<EOF
+XKBMODEL="pc105"
+XKBLAYOUT="de"
+XKBVARIANT=""
+XKBOPTIONS=""
+EOF
+
+if ! id user >/dev/null 2>&1; then
+	useradd -m -s /bin/bash -G sudo,video,audio,input,render,bluetooth,netdev,plugdev user
+	echo 'user:gta4xl' | chpasswd
+fi
+
+systemctl enable NetworkManager ssh bluetooth gdm3 systemd-timesyncd gta4xl-usb-gadget.service serial-getty@ttyGS0.service
+systemctl enable gta4xl-bluetooth.service gta4xl-powerkey.service iio-sensor-proxy.service
+# Suspend does not resume on this kernel
+systemctl mask suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target sleep.target
+printf 'user-db:user\nsystem-db:local\n' > /etc/dconf/profile/user
+printf 'user-db:user\nsystem-db:gdm\nfile-db:/usr/share/gdm/greeter-dconf-defaults\n' > /etc/dconf/profile/gdm
+dconf update
+systemctl set-default graphical.target
+systemctl mask systemd-networkd-wait-online.service
+
+mkdir -p /efs /data/vendor/conn
+echo "d /data/vendor/conn 0755 root root -" > /etc/tmpfiles.d/gta4xl.conf
+rm -f /etc/ssh/ssh_host_*
+cat > /etc/systemd/system/gta4xl-sshkeys.service <<EOF
+[Unit]
+Description=Generate SSH host keys
+Before=ssh.service
+ConditionPathExists=!/etc/ssh/ssh_host_ed25519_key
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/ssh-keygen -A
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl enable gta4xl-sshkeys.service gta4xl-growfs.service
+
+rm -f /usr/local/sbin/gta4xl-firstsetup

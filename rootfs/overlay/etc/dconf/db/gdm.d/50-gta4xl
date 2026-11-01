@@ -1,0 +1,8 @@
+# Suspend does not resume on this kernel. Power toggles the panel, see gta4xl-powerkey.
+[org/gnome/settings-daemon/plugins/power]
+power-button-action='nothing'
+sleep-inactive-ac-type='nothing'
+sleep-inactive-battery-type='nothing'
+
+[org/gnome/desktop/a11y/applications]
+screen-keyboard-enabled=true

@@ -4,3 +4,7 @@
 *.db
 .beads-credential-key
 .beads/proxieddb/
+_scratch/
+work
+session.txt
+initramfs/reboot-to

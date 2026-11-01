@@ -1,0 +1,13 @@
+[Unit]
+Description=USB network and serial console gadget
+After=sys-kernel-config.mount
+Before=ssh.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/gta4xl-usb-gadget
+ExecStop=/usr/local/sbin/gta4xl-usb-gadget stop
+
+[Install]
+WantedBy=multi-user.target

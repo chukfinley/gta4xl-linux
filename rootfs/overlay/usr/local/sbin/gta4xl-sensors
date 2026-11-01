@@ -1,0 +1,195 @@
+#!/usr/bin/env python3
+"""Sensor hub to GNOME bridge: speaks the net.hadess.SensorProxy D-Bus API of iio-sensor-proxy.
+
+The Samsung SSP driver has no standard IIO channels. It streams packed samples on /dev/iio:deviceN
+after the hub is powered and "<type>1" is written to ssp_sensor/enable, so iio-sensor-proxy finds
+nothing. Sensors run only while a client holds a claim.
+"""
+import glob
+import os
+import struct
+import threading
+import time
+
+import gi
+
+gi.require_version("Gio", "2.0")
+from gi.repository import Gio, GLib  # noqa: E402
+
+BUS_NAME = "net.hadess.SensorProxy"
+OBJ = "/net/hadess/SensorProxy"
+HUB = glob.glob("/sys/devices/platform/*.contexthub/poweron")
+ENABLE = "/sys/class/sensors/ssp_sensor/enable"
+XML = """<node><interface name='net.hadess.SensorProxy'>
+<method name='ClaimAccelerometer'/><method name='ReleaseAccelerometer'/>
+<method name='ClaimLight'/><method name='ReleaseLight'/>
+<property name='HasAccelerometer' type='b' access='read'/>
+<property name='AccelerometerOrientation' type='s' access='read'/>
+<property name='HasAmbientLight' type='b' access='read'/>
+<property name='LightLevelUnit' type='s' access='read'/>
+<property name='LightLevel' type='d' access='read'/>
+<property name='HasCompass' type='b' access='read'/>
+</interface></node>"""
+
+ONE_G = 4096.0
+ENTER = 0.60  # share of 1 g in one screen axis before the orientation changes
+STABLE_S = 0.4
+
+
+class Sensor:
+    """One SSP sensor: enable through sysfs, packed samples from the IIO char device."""
+
+    def __init__(self, name, ssp_type, size, on_sample):
+        self.name, self.type, self.size, self.on_sample = name, ssp_type, size, on_sample
+        self.dev = None
+        self.running = False
+
+    def find(self):
+        for d in glob.glob("/sys/bus/iio/devices/iio:device*"):
+            if open(f"{d}/name").read().strip() == self.name:
+                self.dev = d
+                return True
+        return False
+
+    def start(self):
+        if self.running or not self.find():
+            return
+        self.running = True
+        # Scan settings are busy while the buffer stays on from an earlier run
+        if open(f"{self.dev}/buffer/enable").read().strip() != "1":
+            with open(f"{self.dev}/scan_elements/in_timestamp_en", "w") as f:
+                f.write("1")
+            with open(f"{self.dev}/buffer/enable", "w") as f:
+                f.write("1")
+        with open(ENABLE, "w") as f:
+            f.write(f"{self.type}1")
+        threading.Thread(target=self.read, daemon=True).start()
+
+    def stop(self):
+        self.running = False
+        if self.dev:
+            with open(ENABLE, "w") as f:
+                f.write(f"{self.type}0")
+
+    def read(self):
+        fd = os.open("/dev/" + os.path.basename(self.dev), os.O_RDONLY)
+        while self.running:
+            data = os.read(fd, self.size)
+            if len(data) == self.size:
+                self.on_sample(data)
+        os.close(fd)
+
+
+class Proxy:
+    def __init__(self):
+        self.conn = None
+        self.orientation = "undefined"
+        self.candidate, self.since = None, 0.0
+        self.light = 0.0
+        self.claims = {"accel": set(), "light": set()}
+        self.accel = Sensor("accelerometer_sensor", 1, 14, self.on_accel)
+        self.lux = Sensor("light_sensor", 3, 12, self.on_light)
+        self.has_light = self.lux.find()
+
+    def on_accel(self, data):
+        x, y, _ = struct.unpack_from("<hhh", data)
+        gx, gy = x / ONE_G, y / ONE_G
+        new = None
+        if abs(gy) >= abs(gx) and abs(gy) > ENTER:
+            new = "normal" if gy > 0 else "bottom-up"
+        elif abs(gx) > ENTER:
+            new = "right-up" if gx > 0 else "left-up"
+        if new is None or new == self.orientation:
+            self.candidate = None
+            return
+        now = time.monotonic()
+        if new != self.candidate:
+            self.candidate, self.since = new, now
+        elif now - self.since >= STABLE_S:
+            self.candidate = None
+            GLib.idle_add(self.set_orientation, new)
+
+    def set_orientation(self, value):
+        self.orientation = value
+        self.changed({"AccelerometerOrientation": GLib.Variant("s", value)})
+        return False
+
+    def on_light(self, data):
+        lux = struct.unpack_from("<I", data)[0]
+        GLib.idle_add(self.set_light, float(lux))
+
+    def set_light(self, value):
+        self.light = value
+        self.changed({"LightLevel": GLib.Variant("d", value)})
+        return False
+
+    def changed(self, props):
+        self.conn.emit_signal(None, OBJ, "org.freedesktop.DBus.Properties", "PropertiesChanged",
+                              GLib.Variant("(sa{sv}as)", ("net.hadess.SensorProxy", props, [])))
+
+    def update(self):
+        for key, sensor in (("accel", self.accel), ("light", self.lux)):
+            if self.claims[key]:
+                sensor.start()
+            elif sensor.running:
+                sensor.stop()
+
+    def on_call(self, conn, sender, path, iface, method, params, invocation):
+        key = "accel" if "Accelerometer" in method else "light"
+        if method.startswith("Claim"):
+            self.claims[key].add(sender)
+            conn.signal_subscribe("org.freedesktop.DBus", "org.freedesktop.DBus", "NameOwnerChanged",
+                                  "/org/freedesktop/DBus", sender, Gio.DBusSignalFlags.NONE,
+                                  self.on_owner, None)
+        else:
+            self.claims[key].discard(sender)
+        self.update()
+        invocation.return_value(None)
+
+    def on_owner(self, conn, sender, path, iface, signal, params, data):
+        name, _, new = params.unpack()
+        if not new:
+            for claim in self.claims.values():
+                claim.discard(name)
+            self.update()
+
+    def on_get(self, conn, sender, path, iface, prop):
+        values = {
+            "HasAccelerometer": GLib.Variant("b", True),
+            "AccelerometerOrientation": GLib.Variant("s", self.orientation),
+            "HasAmbientLight": GLib.Variant("b", self.has_light),
+            "LightLevelUnit": GLib.Variant("s", "lux"),
+            "LightLevel": GLib.Variant("d", self.light),
+            "HasCompass": GLib.Variant("b", False),
+        }
+        return values[prop]
+
+    def on_bus(self, conn, name):
+        self.conn = conn
+        info = Gio.DBusNodeInfo.new_for_xml(XML).interfaces[0]
+        conn.register_object(OBJ, info, self.on_call, self.on_get, None)
+
+
+def power_hub():
+    for path in HUB:
+        with open(path, "w") as f:
+            f.write("1")
+    for _ in range(100):
+        if os.path.exists("/sys/class/sensors/ssp_sensor/enable") and \
+                any("accelerometer_sensor" in open(f"{d}/name").read()
+                    for d in glob.glob("/sys/bus/iio/devices/iio:device*")):
+            return
+        time.sleep(0.1)
+
+
+def main():
+    if not any("accelerometer_sensor" in open(f"{d}/name").read()
+               for d in glob.glob("/sys/bus/iio/devices/iio:device*")):
+        power_hub()
+    proxy = Proxy()
+    Gio.bus_own_name(Gio.BusType.SYSTEM, BUS_NAME, Gio.BusNameOwnerFlags.NONE, proxy.on_bus, None, None)
+    GLib.MainLoop().run()
+
+
+if __name__ == "__main__":
+    main()

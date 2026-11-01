@@ -1,0 +1,12 @@
+[Unit]
+Description=Grow the root filesystem to the whole userdata partition
+ConditionPathExists=!/var/lib/gta4xl/growfs-done
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/resize2fs /dev/disk/by-label/gta4xl-root
+ExecStartPost=/usr/bin/mkdir -p /var/lib/gta4xl
+ExecStartPost=/usr/bin/touch /var/lib/gta4xl/growfs-done
+
+[Install]
+WantedBy=multi-user.target

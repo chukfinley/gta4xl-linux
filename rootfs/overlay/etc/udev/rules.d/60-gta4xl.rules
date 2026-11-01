@@ -1,0 +1,3 @@
+# Samsung exposes the DECON framebuffer under /dev/graphics on Android; plain Linux names it fb0
+SUBSYSTEM=="graphics", KERNEL=="fb0", GROUP="video", MODE="0660", TAG+="seat", TAG+="master-of-seat"
+KERNEL=="mali0", GROUP="render", MODE="0666"

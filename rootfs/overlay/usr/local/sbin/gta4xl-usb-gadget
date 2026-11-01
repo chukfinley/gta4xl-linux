@@ -1,0 +1,40 @@
+#!/bin/sh
+# USB serial console (ttyGS0, always works) + ECM network for SSH over the USB cable.
+# Tablet: 172.16.42.1, PC: 172.16.42.2. Samsung's NCM gadget never transmits, so ECM.
+set -e
+
+G=/sys/kernel/config/usb_gadget/g1
+mountpoint -q /sys/kernel/config || mount -t configfs configfs /sys/kernel/config
+
+if [ "$1" = "stop" ]; then
+	echo "" > $G/UDC 2>/dev/null || true
+	exit 0
+fi
+
+# The initramfs already bound the gadget: only bring the network up
+if [ -n "$(cat $G/UDC 2>/dev/null)" ]; then
+	IFACE=$(cat $G/functions/ecm.usb0/ifname 2>/dev/null || echo usb0)
+	ip addr replace 172.16.42.1/24 dev "$IFACE"
+	ip link set "$IFACE" up
+	exit 0
+fi
+
+mkdir -p $G/strings/0x409 $G/configs/c.1/strings/0x409
+echo 0x18d1 > $G/idVendor
+echo 0xd002 > $G/idProduct
+echo gta4xl-linux > $G/strings/0x409/serialnumber
+echo Samsung > $G/strings/0x409/manufacturer
+echo "Galaxy Tab S6 Lite (Ubuntu)" > $G/strings/0x409/product
+echo "ecm+acm" > $G/configs/c.1/strings/0x409/configuration
+
+mkdir -p $G/functions/ecm.usb0 $G/functions/acm.usb0
+echo 02:47:54:41:34:01 > $G/functions/ecm.usb0/dev_addr 2>/dev/null || true
+echo 02:47:54:41:34:02 > $G/functions/ecm.usb0/host_addr 2>/dev/null || true
+[ -e $G/configs/c.1/ecm.usb0 ] || ln -s $G/functions/ecm.usb0 $G/configs/c.1/
+[ -e $G/configs/c.1/acm.usb0 ] || ln -s $G/functions/acm.usb0 $G/configs/c.1/
+
+ls /sys/class/udc | head -n 1 > $G/UDC
+
+IFACE=$(cat $G/functions/ecm.usb0/ifname 2>/dev/null || echo usb0)
+ip addr replace 172.16.42.1/24 dev "$IFACE"
+ip link set "$IFACE" up

@@ -1,0 +1,1552 @@
+diff --git a/drivers/gpu/drm/Kconfig b/drivers/gpu/drm/Kconfig
+index 595d0c96b..090f7b381 100644
+--- a/drivers/gpu/drm/Kconfig
++++ b/drivers/gpu/drm/Kconfig
+@@ -69,6 +69,11 @@ config DRM_KMS_HELPER
+ 	help
+ 	  CRTC helpers for KMS drivers.
+ 
++config DRM_KMS_HELPER_BUILTIN
++	bool "Build KMS helpers for out-of-tree style DRM front ends"
++	depends on DRM
++	select DRM_KMS_HELPER
++
+ config DRM_KMS_FB_HELPER
+ 	bool
+ 	depends on DRM_KMS_HELPER
+diff --git a/drivers/input/touchscreen/himax/himax_83102E/himax_common.c b/drivers/input/touchscreen/himax/himax_83102E/himax_common.c
+index bc2acba5d..7f3f92790 100644
+--- a/drivers/input/touchscreen/himax/himax_83102E/himax_common.c
++++ b/drivers/input/touchscreen/himax/himax_83102E/himax_common.c
+@@ -2816,7 +2816,7 @@ static int hx_chk_flash_sts(void)
+ }
+ #endif
+ 
+-#if defined(CONFIG_DRM)
++#if defined(CONFIG_DRM_MSM)
+ static void himax_fb_register(struct work_struct *work)
+ {
+ 	int ret = 0;
+@@ -3077,7 +3077,7 @@ int himax_chip_common_init(void)
+ 
+ 	spin_lock_init(&ts->irq_lock);
+ 	ts->initialized = true;
+-#if defined(CONFIG_FB) || defined(CONFIG_DRM)
++#if defined(CONFIG_FB) || defined(CONFIG_DRM_MSM)
+ 	ts->himax_att_wq = create_singlethread_workqueue("HMX_ATT_reuqest");
+ 
+ 	if (!ts->himax_att_wq) {
+@@ -3152,7 +3152,7 @@ int himax_chip_common_init(void)
+ #ifdef HX_SMART_WAKEUP
+ 	wakeup_source_trash(&ts->ts_SMWP_wake_lock);
+ #endif
+-#if defined(CONFIG_FB) || defined(CONFIG_DRM)
++#if defined(CONFIG_FB) || defined(CONFIG_DRM_MSM)
+ 	cancel_delayed_work_sync(&ts->work_att);
+ 	destroy_workqueue(ts->himax_att_wq);
+ err_get_intr_bit_failed:
+@@ -3228,7 +3228,7 @@ void himax_chip_common_deinit(void)
+ #ifdef HX_SMART_WAKEUP
+ 	wakeup_source_trash(&ts->ts_SMWP_wake_lock);
+ #endif
+-#if defined(CONFIG_DRM)
++#if defined(CONFIG_DRM_MSM)
+ 	if (msm_drm_unregister_client(&ts->fb_notif))
+ 		KE("Error occurred while unregistering fb_notifier.\n");
+ 	cancel_delayed_work_sync(&ts->work_att);
+diff --git a/drivers/input/touchscreen/himax/himax_83102E/himax_common.h b/drivers/input/touchscreen/himax/himax_83102E/himax_common.h
+index aa1902bc7..f92a64b43 100644
+--- a/drivers/input/touchscreen/himax/himax_83102E/himax_common.h
++++ b/drivers/input/touchscreen/himax/himax_83102E/himax_common.h
+@@ -39,7 +39,7 @@
+ #include <linux/proc_fs.h>
+ #include <linux/kallsyms.h>
+ 
+-#if defined(CONFIG_DRM)
++#if defined(CONFIG_DRM_MSM)
+ 	#include <linux/msm_drm_notify.h>
+ #elif defined(CONFIG_FB)
+ 	#include <linux/notifier.h>
+@@ -114,7 +114,7 @@
+ #endif
+ 
+ /*#undef CONFIG_FB*/ /* Enable it if driver go into suspend/resume twice */
+-/*#undef CONFIG_DRM*/ /* Enable it if driver go into suspend/resume twice */
++/*#undef CONFIG_DRM_MSM*/ /* Enable it if driver go into suspend/resume twice */
+ 
+ #if defined(__HIMAX_MOD__)
+ #define HX_USE_KSYM
+@@ -136,7 +136,7 @@
+ #define DELAY_TIME 40 /*Resume queue delay work time after LCM RST (unit:ms)*/
+ #endif
+ 
+-#if defined(CONFIG_DRM)
++#if defined(CONFIG_DRM_MSM)
+ int drm_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
+ #elif defined(CONFIG_FB)
+ int fb_notifier_callback(struct notifier_block *self,
+@@ -481,7 +481,7 @@ struct himax_ts_data {
+ 	int suspend_resume_done;
+ 	int bus_speed;
+ 
+-#if defined(CONFIG_FB) || defined(CONFIG_DRM)
++#if defined(CONFIG_FB) || defined(CONFIG_DRM_MSM)
+ 	struct notifier_block fb_notif;
+ 	struct workqueue_struct *himax_att_wq;
+ 	struct delayed_work work_att;
+diff --git a/drivers/input/touchscreen/himax/himax_83102E/himax_platform.c b/drivers/input/touchscreen/himax/himax_83102E/himax_platform.c
+index e69bc298d..f20221412 100644
+--- a/drivers/input/touchscreen/himax/himax_83102E/himax_platform.c
++++ b/drivers/input/touchscreen/himax/himax_83102E/himax_platform.c
+@@ -830,7 +830,7 @@ static int himax_common_suspend(struct device *dev)
+ 	struct himax_ts_data *ts = dev_get_drvdata(dev);
+ 
+ 	input_info(true, &ts->client->dev, "%s: enter\n", __func__);
+-#ifdef CONFIG_DRM
++#ifdef CONFIG_DRM_MSM
+ 	if (!ts->initialized)
+ 		return -ECANCELED;
+ #endif
+@@ -843,7 +843,7 @@ static int himax_common_resume(struct device *dev)
+ 	struct himax_ts_data *ts = dev_get_drvdata(dev);
+ 
+ 	input_info(true, &ts->client->dev, "%s: enter\n", __func__);
+-#ifdef CONFIG_DRM
++#ifdef CONFIG_DRM_MSM
+ 	/*
+ 	 *	wait until device resume for TDDI
+ 	 *	TDDI: Touch and display Driver IC
+@@ -856,7 +856,7 @@ static int himax_common_resume(struct device *dev)
+ 	return 0;
+ }
+ 
+-#if defined(CONFIG_DRM)
++#if defined(CONFIG_DRM_MSM)
+ int drm_notifier_callback(struct notifier_block *self,
+ 		unsigned long event, void *data)
+ {
+@@ -992,7 +992,7 @@ static const struct i2c_device_id himax_common_ts_id[] = {
+ };
+ 
+ static const struct dev_pm_ops himax_common_pm_ops = {
+-#if (!defined(CONFIG_FB)) && (!defined(CONFIG_DRM))
++#if (!defined(CONFIG_FB)) && (!defined(CONFIG_DRM_MSM))
+ 	.suspend = himax_common_suspend,
+ 	.resume  = himax_common_resume,
+ #endif
+diff --git a/drivers/input/touchscreen/himax/himax_83102E/himax_platform.h b/drivers/input/touchscreen/himax/himax_83102E/himax_platform.h
+index 971cb1cb5..ad9fd77f5 100644
+--- a/drivers/input/touchscreen/himax/himax_83102E/himax_platform.h
++++ b/drivers/input/touchscreen/himax/himax_83102E/himax_platform.h
+@@ -140,7 +140,7 @@ extern uint8_t himax_int_gpio_read(int pinnum);
+ extern int himax_gpio_power_config(struct himax_i2c_platform_data *pdata);
+ void himax_gpio_power_deconfig(struct himax_i2c_platform_data *pdata);
+ 
+-#if defined(CONFIG_DRM)
++#if defined(CONFIG_DRM_MSM)
+ 	extern int drm_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
+ #elif defined(CONFIG_FB)
+ 	extern int fb_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
+diff --git a/drivers/input/touchscreen/himax/himax_83102E/himax_platform_SPI.c b/drivers/input/touchscreen/himax/himax_83102E/himax_platform_SPI.c
+index 136b274d8..d3efaf1e2 100644
+--- a/drivers/input/touchscreen/himax/himax_83102E/himax_platform_SPI.c
++++ b/drivers/input/touchscreen/himax/himax_83102E/himax_platform_SPI.c
+@@ -847,7 +847,7 @@ static int himax_common_suspend(struct device *dev)
+ 	struct himax_ts_data *ts = dev_get_drvdata(dev);
+ 
+ 	I("%s: enter\n", __func__);
+-#ifdef CONFIG_DRM
++#ifdef CONFIG_DRM_MSM
+ 	if (!ts->initialized)
+ 		return -ECANCELED;
+ #endif
+@@ -860,7 +860,7 @@ static int himax_common_resume(struct device *dev)
+ 	struct himax_ts_data *ts = dev_get_drvdata(dev);
+ 
+ 	I("%s: enter\n", __func__);
+-#ifdef CONFIG_DRM
++#ifdef CONFIG_DRM_MSM
+ 	/*
+ 	 *	wait until device resume for TDDI
+ 	 *	TDDI: Touch and display Driver IC
+@@ -875,7 +875,7 @@ static int himax_common_resume(struct device *dev)
+ }
+ #endif
+ 
+-#if defined(CONFIG_DRM)
++#if defined(CONFIG_DRM_MSM)
+ int drm_notifier_callback(struct notifier_block *self,
+ 		unsigned long event, void *data)
+ {
+@@ -1151,7 +1151,7 @@ int himax_chip_common_remove(struct spi_device *spi)
+ }
+ 
+ static const struct dev_pm_ops himax_common_pm_ops = {
+-#if (!defined(CONFIG_FB)) && (!defined(CONFIG_DRM))
++#if (!defined(CONFIG_FB)) && (!defined(CONFIG_DRM_MSM))
+ 	.suspend = himax_common_suspend,
+ 	.resume  = himax_common_resume,
+ #endif
+diff --git a/drivers/input/touchscreen/himax/himax_83102E/himax_platform_SPI.h b/drivers/input/touchscreen/himax/himax_83102E/himax_platform_SPI.h
+index badb6493b..6190672c2 100644
+--- a/drivers/input/touchscreen/himax/himax_83102E/himax_platform_SPI.h
++++ b/drivers/input/touchscreen/himax/himax_83102E/himax_platform_SPI.h
+@@ -152,7 +152,7 @@ extern uint8_t himax_int_gpio_read(int pinnum);
+ extern int himax_gpio_power_config(struct himax_i2c_platform_data *pdata);
+ void himax_gpio_power_deconfig(struct himax_i2c_platform_data *pdata);
+ 
+-#if defined(CONFIG_DRM)
++#if defined(CONFIG_DRM_MSM)
+ 	extern int drm_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
+ #elif defined(CONFIG_FB)
+ 	extern int fb_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
+diff --git a/drivers/misc/samsung/scsc_bt/scsc_bluez.c b/drivers/misc/samsung/scsc_bt/scsc_bluez.c
+index 1c58f95c1..06c7b8409 100755
+--- a/drivers/misc/samsung/scsc_bt/scsc_bluez.c
++++ b/drivers/misc/samsung/scsc_bt/scsc_bluez.c
+@@ -7,6 +7,7 @@
+  ****************************************************************************/
+ 
+ #include <linux/init.h>
++#include <linux/version.h>
+ #include <linux/kernel.h>
+ #include <linux/module.h>
+ #include <linux/types.h>
+@@ -182,7 +183,7 @@ static void slsi_bt_open_worker(struct work_struct *work)
+ 		}
+ 
+ 		hdev->bus = HCI_VIRTUAL;
+-		hdev->dev_type = HCI_BREDR;
++		hdev->dev_type = HCI_PRIMARY;
+ 
+ 		SET_HCIDEV_DEV(hdev, dev_ref);
+ 
+diff --git a/drivers/misc/samsung/scsc_bt/scsc_bt_module.c b/drivers/misc/samsung/scsc_bt/scsc_bt_module.c
+index ae976f94b..ae153d0a2 100755
+--- a/drivers/misc/samsung/scsc_bt/scsc_bt_module.c
++++ b/drivers/misc/samsung/scsc_bt/scsc_bt_module.c
+@@ -700,7 +700,8 @@ static int slsi_sm_ant_service_cleanup(void)
+ static void get_bluetooth_address(uint32_t *lap, uint8_t *uap, uint16_t *nap)
+ {
+ #ifdef SCSC_BT_ADDR
+-	struct firmware *firm;
++	const struct firmware *firm;
++	int err;
+ #endif
+ #if defined(CONFIG_ARCH_EXYNOS) || defined(CONFIG_ARCH_EXYNOS9)
+ 	*nap = (exynos_soc_info.unique_id & 0x000000FFFF00) >> 8;
+@@ -727,7 +728,7 @@ static void get_bluetooth_address(uint32_t *lap, uint8_t *uap, uint16_t *nap)
+ 	} else if (firm && firm->size) {
+ 		u32 u[SCSC_BT_ADDR_LEN];
+ 
+-#ifdef CONFIG_SCSC_BT_BLUEZ
++#if defined(CONFIG_SCSC_BT_BLUEZ) && SCSC_BT_ADDR_LEN == 3
+ 		/* Convert the data into a native format */
+ 		if (sscanf(firm->data, "%04x %02X %06x", &u[0], &u[1], &u[2])
+ 		    == SCSC_BT_ADDR_LEN) {
+diff --git a/drivers/video/fbdev/exynos/dpu20/Kconfig b/drivers/video/fbdev/exynos/dpu20/Kconfig
+index 05d2d9ce1..d1795c75f 100644
+--- a/drivers/video/fbdev/exynos/dpu20/Kconfig
++++ b/drivers/video/fbdev/exynos/dpu20/Kconfig
+@@ -119,6 +119,13 @@ config EXYNOS_PANEL_CABC
+ 	help
+ 	  If this menu is enabled, you can control CABC mode of panel.
+ 
++config EXYNOS_DECON_KMS
++	bool "DRM/KMS front end for the DECON DSI panel"
++	depends on DRM=y && DRM_KMS_HELPER=y
++	help
++	  Registers /dev/dri/card0 on top of DECON so that Wayland
++	  compositors and other KMS clients can drive the built-in panel.
++
+ endif
+ 
+ source "drivers/video/fbdev/exynos/dpu20/panels/Kconfig"
+diff --git a/drivers/video/fbdev/exynos/dpu20/Makefile b/drivers/video/fbdev/exynos/dpu20/Makefile
+index 05f14563a..d472ab5f2 100644
+--- a/drivers/video/fbdev/exynos/dpu20/Makefile
++++ b/drivers/video/fbdev/exynos/dpu20/Makefile
+@@ -20,4 +20,5 @@ endif
+ obj-$(CONFIG_EXYNOS_DPU20) += decon.o
+ obj-$(CONFIG_EXYNOS_BTS) += bts.o
+ decon-y += decon_core.o decon_dsi.o decon_wb.o helper.o win_update.o cursor.o fence.o event_log.o
++obj-$(CONFIG_EXYNOS_DECON_KMS) += decon_kms.o
+ obj-y += panels/
+diff --git a/drivers/video/fbdev/exynos/dpu20/decon.h b/drivers/video/fbdev/exynos/dpu20/decon.h
+index 4e366ceec..e1977d978 100644
+--- a/drivers/video/fbdev/exynos/dpu20/decon.h
++++ b/drivers/video/fbdev/exynos/dpu20/decon.h
+@@ -1147,6 +1147,10 @@ void dpu_set_mres_config(struct decon_device *decon, struct decon_reg_data *regs
+ int decon_check_var(struct fb_var_screeninfo *var, struct fb_info *info);
+ int decon_set_par(struct fb_info *info);
+ int decon_pan_display(struct fb_var_screeninfo *var, struct fb_info *info);
++int decon_show_buffer(struct decon_device *decon, dma_addr_t addr,
++		enum decon_pixel_format format, u32 width, u32 height, u32 pitch_px);
++int decon_kms_blank(struct decon_device *decon, int blank_mode);
++extern bool decon_kms_active;
+ int decon_setcolreg(unsigned regno,
+ 			    unsigned red, unsigned green, unsigned blue,
+ 			    unsigned transp, struct fb_info *info);
+diff --git a/drivers/video/fbdev/exynos/dpu20/decon_core.c b/drivers/video/fbdev/exynos/dpu20/decon_core.c
+index 20a52c044..941c6ebb6 100644
+--- a/drivers/video/fbdev/exynos/dpu20/decon_core.c
++++ b/drivers/video/fbdev/exynos/dpu20/decon_core.c
+@@ -1064,6 +1064,16 @@ static int decon_blank(int blank_mode, struct fb_info *info)
+ 	return ret;
+ }
+ 
++bool decon_kms_active;
++EXPORT_SYMBOL(decon_kms_active);
++
++/* Caller holds the fb lock of the default window. */
++int decon_kms_blank(struct decon_device *decon, int blank_mode)
++{
++	return decon_blank(blank_mode, decon->win[decon->dt.dft_win]->fbinfo);
++}
++EXPORT_SYMBOL(decon_kms_blank);
++
+ /* ---------- FB_IOCTL INTERFACE ----------- */
+ static void decon_activate_vsync(struct decon_device *decon)
+ {
+@@ -3209,13 +3219,33 @@ static int decon_compat_ioctl(struct fb_info *info, unsigned int cmd,
+ #endif
+ 
+ /* ---------- FREAMBUFFER INTERFACE ----------- */
++static void decon_fb_fillrect(struct fb_info *info, const struct fb_fillrect *rect)
++{
++	if (info->screen_base)
++		cfb_fillrect(info, rect);
++}
++
++static void decon_fb_copyarea(struct fb_info *info, const struct fb_copyarea *area)
++{
++	if (info->screen_base)
++		cfb_copyarea(info, area);
++}
++
++static void decon_fb_imageblit(struct fb_info *info, const struct fb_image *image)
++{
++	if (info->screen_base)
++		cfb_imageblit(info, image);
++}
++
+ static struct fb_ops decon_fb_ops = {
+ 	.owner		= THIS_MODULE,
+ 	.fb_check_var	= decon_check_var,
+ 	.fb_set_par	= decon_set_par,
+ 	.fb_blank	= decon_blank,
+ 	.fb_setcolreg	= decon_setcolreg,
+-	.fb_fillrect    = cfb_fillrect,
++	.fb_fillrect	= decon_fb_fillrect,
++	.fb_copyarea	= decon_fb_copyarea,
++	.fb_imageblit	= decon_fb_imageblit,
+ #ifdef CONFIG_COMPAT
+ 	.fb_compat_ioctl = decon_compat_ioctl,
+ #endif
+@@ -3458,13 +3488,9 @@ static int decon_fb_alloc_memory(struct decon_device *decon, struct decon_win *w
+ 
+ 	memset(vaddr, 0x00, size);
+ 
++	/* Kept mapped so fbcon can draw into the boot framebuffer */
+ 	fbi->screen_base = vaddr;
+-
+-#if !defined(CONFIG_SUPPORT_LEGACY_ION)
+-	dma_buf_vunmap(buf, vaddr);
+-#endif
+-
+-	fbi->screen_base = NULL;
++	fbi->screen_size = size;
+ 
+ 	win->dma_buf_data[1].fence = NULL;
+ 	win->dma_buf_data[2].fence = NULL;
+@@ -4041,6 +4067,52 @@ static int decon_initial_display(struct decon_device *decon, bool is_colormap)
+ 	return 0;
+ }
+ 
++/*
++ * Without Android's hwcomposer nobody unblanks DECON or triggers frames, and the
++ * panel runs in MIPI command mode, so plain fbdev clients (Xorg fbdev) would never
++ * reach the screen. Periodically push the default window to the panel instead.
++ */
++static unsigned int fb_autorefresh_hz = 30;
++module_param(fb_autorefresh_hz, uint, 0644);
++MODULE_PARM_DESC(fb_autorefresh_hz, "fbdev auto refresh rate for DSI command mode, 0 = off");
++
++static struct decon_device *autorefresh_decon;
++static void decon_fb_autorefresh(struct work_struct *work);
++static DECLARE_DELAYED_WORK(decon_autorefresh_work, decon_fb_autorefresh);
++
++static void decon_fb_autorefresh(struct work_struct *work)
++{
++	struct decon_device *decon = autorefresh_decon;
++	struct fb_info *info;
++	unsigned int hz = READ_ONCE(fb_autorefresh_hz);
++
++	if (!decon)
++		return;
++	if (!hz || READ_ONCE(decon_kms_active)) {
++		schedule_delayed_work(&decon_autorefresh_work, HZ);
++		return;
++	}
++
++	info = decon->win[decon->dt.dft_win]->fbinfo;
++	if (lock_fb_info(info)) {
++		if (decon->state == DECON_STATE_INIT)
++			decon_blank(FB_BLANK_UNBLANK, info);
++		if (decon->state == DECON_STATE_ON || IS_DECON_HIBER_STATE(decon))
++			decon_pan_display(&info->var, info);
++		unlock_fb_info(info);
++	}
++
++	schedule_delayed_work(&decon_autorefresh_work, max(1U, HZ / hz));
++}
++
++static void decon_start_autorefresh(struct decon_device *decon)
++{
++	if (decon->id || decon->dt.out_type != DECON_OUT_DSI)
++		return;
++	autorefresh_decon = decon;
++	schedule_delayed_work(&decon_autorefresh_work, 5 * HZ);
++}
++
+ /* --------- DRIVER INITIALIZATION ---------- */
+ static int decon_probe(struct platform_device *pdev)
+ {
+@@ -4165,6 +4237,8 @@ static int decon_probe(struct platform_device *pdev)
+ 	if (ret)
+ 		goto err_display;
+ 
++	decon_start_autorefresh(decon);
++
+ #if defined(CONFIG_EXYNOS_READ_ESD_SOLUTION)
+ 	ret = decon_create_esd_thread(decon);
+ 	if (ret)
+diff --git a/drivers/video/fbdev/exynos/dpu20/decon_dsi.c b/drivers/video/fbdev/exynos/dpu20/decon_dsi.c
+index 0b0b0a96e..d58c3e671 100644
+--- a/drivers/video/fbdev/exynos/dpu20/decon_dsi.c
++++ b/drivers/video/fbdev/exynos/dpu20/decon_dsi.c
+@@ -851,7 +851,7 @@ int decon_pan_display(struct fb_var_screeninfo *var, struct fb_info *info)
+ 		return 0;
+ 	}
+ 
+-	decon_info("%s: [%d %d %d %d %d %d]\n", __func__,
++	decon_dbg("%s: [%d %d %d %d %d %d]\n", __func__,
+ 			var->xoffset, var->yoffset,
+ 			var->xres, var->yres,
+ 			var->xres_virtual, var->yres_virtual);
+@@ -927,6 +927,61 @@ int decon_pan_display(struct fb_var_screeninfo *var, struct fb_info *info)
+ }
+ EXPORT_SYMBOL(decon_pan_display);
+ 
++/* Scan out a buffer that is already mapped into the DPU IOMMU. Caller holds the fb lock. */
++int decon_show_buffer(struct decon_device *decon, dma_addr_t addr,
++		enum decon_pixel_format format, u32 width, u32 height, u32 pitch_px)
++{
++	struct decon_win *win = decon->win[decon->dt.dft_win];
++	struct decon_win_config config;
++	struct decon_mode_info psr;
++	int dpp_id = DPU_DMA2CH(decon->dt.dft_idma);
++	int ret = 0;
++
++	if (decon->dt.out_type != DECON_OUT_DSI)
++		return -ENODEV;
++	if ((!IS_DECON_HIBER_STATE(decon) && IS_DECON_OFF_STATE(decon)) ||
++			decon->state == DECON_STATE_INIT)
++		return -EAGAIN;
++
++	memset(&config, 0, sizeof(config));
++	config.format = format;
++	config.dpp_parm.addr[0] = addr;
++	config.src.w = width;
++	config.src.h = height;
++	config.src.f_w = pitch_px;
++	config.src.f_h = height;
++	config.dst.w = width;
++	config.dst.h = height;
++	config.dst.f_w = decon->lcd_info->xres;
++	config.dst.f_h = decon->lcd_info->yres;
++	if (decon_check_limitation(decon, decon->dt.dft_win, &config) < 0)
++		return -EINVAL;
++
++	decon_hiber_block_exit(decon);
++	decon_to_psr_info(decon, &psr);
++
++	set_bit(dpp_id, &decon->cur_using_dpp);
++	set_bit(dpp_id, &decon->prev_used_dpp);
++	if (v4l2_subdev_call(decon->dpp_sd[dpp_id], core, ioctl, DPP_WIN_CONFIG, &config)) {
++		decon_err("%s: Failed to config DPP-%d\n", __func__, win->dpp_id);
++		decon_reg_win_enable_and_update(decon->id, decon->dt.dft_win, false);
++		clear_bit(dpp_id, &decon->cur_using_dpp);
++		set_bit(dpp_id, &decon->dpp_err_stat);
++		ret = -EIO;
++		goto out;
++	}
++
++	decon_reg_update_req_window(decon->id, win->idx);
++	decon_reg_start(decon->id, &psr);
++out:
++	decon_wait_for_vsync(decon, VSYNC_TIMEOUT_MSEC);
++	if (decon_reg_wait_update_done_and_mask(decon->id, &psr, SHADOW_UPDATE_TIMEOUT) < 0)
++		decon_err("%s: wait_for_update_timeout\n", __func__);
++	decon_hiber_unblock(decon);
++	return ret;
++}
++EXPORT_SYMBOL(decon_show_buffer);
++
+ int decon_mmap(struct fb_info *info, struct vm_area_struct *vma)
+ {
+ 	int ret;
+diff --git a/drivers/video/fbdev/exynos/dpu20/decon_kms.c b/drivers/video/fbdev/exynos/dpu20/decon_kms.c
+new file mode 100644
+index 000000000..bc5eecf43
+--- /dev/null
++++ b/drivers/video/fbdev/exynos/dpu20/decon_kms.c
+@@ -0,0 +1,527 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Minimal DRM/KMS front end for the Exynos DPU20 DECON fbdev driver.
++ *
++ * Exposes the built-in DSI panel as a single CRTC/plane/connector so that
++ * KMS clients (mutter, Xorg modesetting, kmscube) can run. Buffers are ion
++ * dma-bufs mapped into the DPU IOMMU; foreign dma-bufs (e.g. from Mali)
++ * can be imported via PRIME as long as the exporter supports ion_iovmm_map.
++ */
++
++#include <linux/dma-buf.h>
++#include <linux/ion_exynos.h>
++#include <linux/module.h>
++#include <linux/slab.h>
++
++#include <drm/drmP.h>
++#include <drm/drm_atomic_helper.h>
++#include <drm/drm_crtc_helper.h>
++#include <drm/drm_gem.h>
++#include <drm/drm_gem_framebuffer_helper.h>
++#include <drm/drm_simple_kms_helper.h>
++
++#include "decon.h"
++#include "dsim.h"
++
++static bool swap_rb;
++module_param(swap_rb, bool, 0644);
++MODULE_PARM_DESC(swap_rb, "Swap red and blue channels on scanout");
++
++struct dk_device {
++	struct drm_device *drm;
++	struct drm_simple_display_pipe pipe;
++	struct drm_connector connector;
++	struct decon_device *decon;
++	struct device *iommu_dev;
++	struct drm_display_mode mode;
++};
++
++struct dk_bo {
++	struct drm_gem_object base;
++	struct dma_buf *dmabuf;
++	struct dma_buf_attachment *attach;
++	struct sg_table *sgt;
++	dma_addr_t iova;
++};
++
++static inline struct dk_bo *to_dk_bo(struct drm_gem_object *obj)
++{
++	return container_of(obj, struct dk_bo, base);
++}
++
++static inline struct dk_device *to_dk(struct drm_device *drm)
++{
++	return drm->dev_private;
++}
++
++/* ---------------- GEM ---------------- */
++
++static struct dk_bo *dk_bo_wrap(struct drm_device *drm, struct dma_buf *dmabuf)
++{
++	struct dk_device *dk = to_dk(drm);
++	struct dk_bo *bo;
++	int ret;
++
++	bo = kzalloc(sizeof(*bo), GFP_KERNEL);
++	if (!bo)
++		return ERR_PTR(-ENOMEM);
++
++	drm_gem_private_object_init(drm, &bo->base, dmabuf->size);
++
++	get_dma_buf(dmabuf);
++	bo->dmabuf = dmabuf;
++
++	bo->attach = dma_buf_attach(dmabuf, dk->iommu_dev);
++	if (IS_ERR(bo->attach)) {
++		ret = PTR_ERR(bo->attach);
++		goto err_put;
++	}
++
++	bo->sgt = dma_buf_map_attachment(bo->attach, DMA_TO_DEVICE);
++	if (IS_ERR(bo->sgt)) {
++		ret = PTR_ERR(bo->sgt);
++		goto err_detach;
++	}
++
++	bo->iova = ion_iovmm_map(bo->attach, 0, dmabuf->size, DMA_TO_DEVICE, 0);
++	if (IS_ERR_VALUE(bo->iova)) {
++		ret = (int)bo->iova;
++		goto err_unmap;
++	}
++
++	return bo;
++
++err_unmap:
++	dma_buf_unmap_attachment(bo->attach, bo->sgt, DMA_TO_DEVICE);
++err_detach:
++	dma_buf_detach(dmabuf, bo->attach);
++err_put:
++	dma_buf_put(dmabuf);
++	drm_gem_object_release(&bo->base);
++	kfree(bo);
++	return ERR_PTR(ret);
++}
++
++static void dk_gem_free(struct drm_gem_object *obj)
++{
++	struct dk_bo *bo = to_dk_bo(obj);
++
++	drm_gem_free_mmap_offset(obj);
++	ion_iovmm_unmap(bo->attach, bo->iova);
++	dma_buf_unmap_attachment(bo->attach, bo->sgt, DMA_TO_DEVICE);
++	dma_buf_detach(bo->dmabuf, bo->attach);
++	dma_buf_put(bo->dmabuf);
++	drm_gem_object_release(obj);
++	kfree(bo);
++}
++
++static int dk_dumb_create(struct drm_file *file, struct drm_device *drm,
++			  struct drm_mode_create_dumb *args)
++{
++	struct dma_buf *dmabuf;
++	struct dk_bo *bo;
++	int ret;
++
++	if (!args->width || !args->height || args->bpp != 32)
++		return -EINVAL;
++
++	args->pitch = ALIGN(args->width * 4, 64);
++	args->size = PAGE_ALIGN((u64)args->pitch * args->height);
++
++	dmabuf = ion_alloc_dmabuf("ion_system_heap", args->size, 0);
++	if (IS_ERR(dmabuf))
++		return PTR_ERR(dmabuf);
++
++	bo = dk_bo_wrap(drm, dmabuf);
++	dma_buf_put(dmabuf);
++	if (IS_ERR(bo))
++		return PTR_ERR(bo);
++
++	ret = drm_gem_handle_create(file, &bo->base, &args->handle);
++	drm_gem_object_put_unlocked(&bo->base);
++	return ret;
++}
++
++static int dk_dumb_map_offset(struct drm_file *file, struct drm_device *drm,
++			      u32 handle, u64 *offset)
++{
++	struct drm_gem_object *obj;
++	int ret;
++
++	obj = drm_gem_object_lookup(file, handle);
++	if (!obj)
++		return -ENOENT;
++
++	ret = drm_gem_create_mmap_offset(obj);
++	if (!ret)
++		*offset = drm_vma_node_offset_addr(&obj->vma_node);
++
++	drm_gem_object_put_unlocked(obj);
++	return ret;
++}
++
++static int dk_mmap(struct file *filp, struct vm_area_struct *vma)
++{
++	struct drm_file *priv = filp->private_data;
++	struct drm_device *drm = priv->minor->dev;
++	struct drm_vma_offset_node *node;
++	struct drm_gem_object *obj = NULL;
++	int ret;
++
++	drm_vma_offset_lock_lookup(drm->vma_offset_manager);
++	node = drm_vma_offset_exact_lookup_locked(drm->vma_offset_manager,
++						  vma->vm_pgoff, vma_pages(vma));
++	if (node) {
++		obj = container_of(node, struct drm_gem_object, vma_node);
++		if (!kref_get_unless_zero(&obj->refcount))
++			obj = NULL;
++	}
++	drm_vma_offset_unlock_lookup(drm->vma_offset_manager);
++
++	if (!obj)
++		return -EINVAL;
++
++	if (!drm_vma_node_is_allowed(node, priv)) {
++		ret = -EACCES;
++		goto out;
++	}
++
++	vma->vm_pgoff = 0;
++	ret = dma_buf_mmap(to_dk_bo(obj)->dmabuf, vma, 0);
++out:
++	drm_gem_object_put_unlocked(obj);
++	return ret;
++}
++
++static struct dma_buf *dk_prime_export(struct drm_device *drm,
++				       struct drm_gem_object *obj, int flags)
++{
++	struct dk_bo *bo = to_dk_bo(obj);
++
++	get_dma_buf(bo->dmabuf);
++	return bo->dmabuf;
++}
++
++static struct drm_gem_object *dk_prime_import(struct drm_device *drm,
++					      struct dma_buf *dmabuf)
++{
++	struct dk_bo *bo = dk_bo_wrap(drm, dmabuf);
++
++	return IS_ERR(bo) ? ERR_CAST(bo) : &bo->base;
++}
++
++/* ---------------- KMS ---------------- */
++
++static int dk_format(u32 drm_format, enum decon_pixel_format *out)
++{
++	bool bgr;
++
++	switch (drm_format) {
++	case DRM_FORMAT_XRGB8888:
++	case DRM_FORMAT_ARGB8888:
++		bgr = true;
++		break;
++	case DRM_FORMAT_XBGR8888:
++	case DRM_FORMAT_ABGR8888:
++		bgr = false;
++		break;
++	default:
++		return -EINVAL;
++	}
++
++	if (swap_rb)
++		bgr = !bgr;
++
++	/* DECON names follow memory byte order, DRM names a little-endian word */
++	*out = bgr ? DECON_PIXEL_FORMAT_BGRX_8888 : DECON_PIXEL_FORMAT_RGBX_8888;
++	return 0;
++}
++
++static void dk_scanout(struct dk_device *dk, struct drm_framebuffer *fb)
++{
++	struct decon_device *decon = dk->decon;
++	struct fb_info *info = decon->win[decon->dt.dft_win]->fbinfo;
++	enum decon_pixel_format fmt;
++	struct dk_bo *bo;
++
++	if (!fb || dk_format(fb->format->format, &fmt))
++		return;
++
++	bo = to_dk_bo(drm_gem_fb_get_obj(fb, 0));
++
++	if (!lock_fb_info(info))
++		return;
++	if (decon->state == DECON_STATE_INIT || decon->state == DECON_STATE_OFF)
++		decon_kms_blank(decon, FB_BLANK_UNBLANK);
++	decon_show_buffer(decon, bo->iova + fb->offsets[0], fmt,
++			  fb->width, fb->height, fb->pitches[0] / 4);
++	unlock_fb_info(info);
++}
++
++static void dk_send_event(struct drm_crtc *crtc)
++{
++	struct drm_pending_vblank_event *event = crtc->state->event;
++
++	if (!event)
++		return;
++
++	crtc->state->event = NULL;
++	spin_lock_irq(&crtc->dev->event_lock);
++	drm_crtc_send_vblank_event(crtc, event);
++	spin_unlock_irq(&crtc->dev->event_lock);
++}
++
++static void dk_pipe_enable(struct drm_simple_display_pipe *pipe,
++			   struct drm_crtc_state *crtc_state)
++{
++	struct dk_device *dk = to_dk(pipe->crtc.dev);
++
++	WRITE_ONCE(decon_kms_active, true);
++	dk_scanout(dk, pipe->plane.state->fb);
++	dk_send_event(&pipe->crtc);
++}
++
++static void dk_pipe_disable(struct drm_simple_display_pipe *pipe)
++{
++	struct dk_device *dk = to_dk(pipe->crtc.dev);
++	struct decon_device *decon = dk->decon;
++	struct fb_info *info = decon->win[decon->dt.dft_win]->fbinfo;
++
++	if (lock_fb_info(info)) {
++		if (decon->state != DECON_STATE_OFF)
++			decon_kms_blank(decon, FB_BLANK_POWERDOWN);
++		unlock_fb_info(info);
++	}
++	dk_send_event(&pipe->crtc);
++}
++
++static int dk_pipe_check(struct drm_simple_display_pipe *pipe,
++			 struct drm_plane_state *plane_state,
++			 struct drm_crtc_state *crtc_state)
++{
++	struct dk_device *dk = to_dk(pipe->crtc.dev);
++	struct drm_framebuffer *fb = plane_state->fb;
++	enum decon_pixel_format fmt;
++
++	if (!fb)
++		return 0;
++	if (dk_format(fb->format->format, &fmt))
++		return -EINVAL;
++	if (fb->width != dk->mode.hdisplay || fb->height != dk->mode.vdisplay ||
++	    plane_state->crtc_x || plane_state->crtc_y ||
++	    plane_state->crtc_w != dk->mode.hdisplay ||
++	    plane_state->crtc_h != dk->mode.vdisplay ||
++	    plane_state->src_x || plane_state->src_y)
++		return -EINVAL;
++	if (fb->pitches[0] % 4)
++		return -EINVAL;
++	return 0;
++}
++
++static void dk_pipe_update(struct drm_simple_display_pipe *pipe,
++			   struct drm_plane_state *old_state)
++{
++	struct dk_device *dk = to_dk(pipe->crtc.dev);
++
++	if (pipe->crtc.state->active)
++		dk_scanout(dk, pipe->plane.state->fb);
++	dk_send_event(&pipe->crtc);
++}
++
++static int dk_pipe_prepare_fb(struct drm_simple_display_pipe *pipe,
++			      struct drm_plane_state *plane_state)
++{
++	return drm_gem_fb_prepare_fb(&pipe->plane, plane_state);
++}
++
++static const struct drm_simple_display_pipe_funcs dk_pipe_funcs = {
++	.enable = dk_pipe_enable,
++	.disable = dk_pipe_disable,
++	.check = dk_pipe_check,
++	.update = dk_pipe_update,
++	.prepare_fb = dk_pipe_prepare_fb,
++};
++
++static int dk_fb_dirty(struct drm_framebuffer *fb, struct drm_file *file,
++		       unsigned int flags, unsigned int color,
++		       struct drm_clip_rect *clips, unsigned int num_clips)
++{
++	struct dk_device *dk = to_dk(fb->dev);
++	struct drm_simple_display_pipe *pipe = &dk->pipe;
++
++	drm_modeset_lock_all(fb->dev);
++	if (pipe->plane.state->fb == fb && pipe->crtc.state->active)
++		dk_scanout(dk, fb);
++	drm_modeset_unlock_all(fb->dev);
++	return 0;
++}
++
++static const struct drm_framebuffer_funcs dk_fb_funcs = {
++	.destroy = drm_gem_fb_destroy,
++	.create_handle = drm_gem_fb_create_handle,
++	.dirty = dk_fb_dirty,
++};
++
++static struct drm_framebuffer *dk_fb_create(struct drm_device *drm,
++					    struct drm_file *file,
++					    const struct drm_mode_fb_cmd2 *cmd)
++{
++	return drm_gem_fb_create_with_funcs(drm, file, cmd, &dk_fb_funcs);
++}
++
++static const struct drm_mode_config_funcs dk_mode_config_funcs = {
++	.fb_create = dk_fb_create,
++	.atomic_check = drm_atomic_helper_check,
++	.atomic_commit = drm_atomic_helper_commit,
++};
++
++static int dk_conn_get_modes(struct drm_connector *connector)
++{
++	struct dk_device *dk = to_dk(connector->dev);
++	struct drm_display_mode *mode;
++
++	mode = drm_mode_duplicate(connector->dev, &dk->mode);
++	if (!mode)
++		return 0;
++
++	drm_mode_probed_add(connector, mode);
++	connector->display_info.width_mm = dk->decon->lcd_info->width;
++	connector->display_info.height_mm = dk->decon->lcd_info->height;
++	return 1;
++}
++
++static const struct drm_connector_helper_funcs dk_conn_helper_funcs = {
++	.get_modes = dk_conn_get_modes,
++};
++
++static const struct drm_connector_funcs dk_conn_funcs = {
++	.reset = drm_atomic_helper_connector_reset,
++	.fill_modes = drm_helper_probe_single_connector_modes,
++	.destroy = drm_connector_cleanup,
++	.atomic_duplicate_state = drm_atomic_helper_connector_duplicate_state,
++	.atomic_destroy_state = drm_atomic_helper_connector_destroy_state,
++};
++
++static const u32 dk_formats[] = {
++	DRM_FORMAT_XRGB8888,
++	DRM_FORMAT_ARGB8888,
++	DRM_FORMAT_XBGR8888,
++	DRM_FORMAT_ABGR8888,
++};
++
++static const struct file_operations dk_fops = {
++	.owner = THIS_MODULE,
++	.open = drm_open,
++	.release = drm_release,
++	.unlocked_ioctl = drm_ioctl,
++	.compat_ioctl = drm_compat_ioctl,
++	.poll = drm_poll,
++	.read = drm_read,
++	.llseek = noop_llseek,
++	.mmap = dk_mmap,
++};
++
++static struct drm_driver dk_driver = {
++	.driver_features = DRIVER_GEM | DRIVER_MODESET | DRIVER_ATOMIC | DRIVER_PRIME,
++	.fops = &dk_fops,
++	.gem_free_object_unlocked = dk_gem_free,
++	.dumb_create = dk_dumb_create,
++	.dumb_map_offset = dk_dumb_map_offset,
++	.dumb_destroy = drm_gem_dumb_destroy,
++	.prime_handle_to_fd = drm_gem_prime_handle_to_fd,
++	.prime_fd_to_handle = drm_gem_prime_fd_to_handle,
++	.gem_prime_export = dk_prime_export,
++	.gem_prime_import = dk_prime_import,
++	.name = "decon-kms",
++	.desc = "Exynos DECON KMS front end",
++	.date = "20261015",
++	.major = 1,
++	.minor = 0,
++};
++
++static void dk_init_mode(struct dk_device *dk)
++{
++	struct decon_lcd *lcd = dk->decon->lcd_info;
++	struct drm_display_mode *m = &dk->mode;
++
++	m->hdisplay = lcd->xres;
++	m->hsync_start = m->hdisplay + lcd->hfp;
++	m->hsync_end = m->hsync_start + lcd->hsa;
++	m->htotal = m->hsync_end + lcd->hbp;
++	m->vdisplay = lcd->yres;
++	m->vsync_start = m->vdisplay + lcd->vfp;
++	m->vsync_end = m->vsync_start + lcd->vsa;
++	m->vtotal = m->vsync_end + lcd->vbp;
++	m->clock = DIV_ROUND_UP(m->htotal * m->vtotal * 60, 1000);
++	m->type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED;
++	m->width_mm = lcd->width;
++	m->height_mm = lcd->height;
++	drm_mode_set_name(m);
++}
++
++static int __init decon_kms_init(void)
++{
++	struct decon_device *decon = get_decon_drvdata(0);
++	struct dsim_device *dsim;
++	struct drm_device *drm;
++	struct dk_device *dk;
++	int ret;
++
++	if (!decon || decon->dt.out_type != DECON_OUT_DSI || !decon->out_sd[0])
++		return -ENODEV;
++
++	dk = kzalloc(sizeof(*dk), GFP_KERNEL);
++	if (!dk)
++		return -ENOMEM;
++
++	dsim = v4l2_get_subdevdata(decon->out_sd[0]);
++	dk->decon = decon;
++	dk->iommu_dev = dsim->dev;
++	dk_init_mode(dk);
++
++	drm = drm_dev_alloc(&dk_driver, decon->dev);
++	if (IS_ERR(drm)) {
++		ret = PTR_ERR(drm);
++		goto err_free;
++	}
++	dk->drm = drm;
++	drm->dev_private = dk;
++
++	drm_mode_config_init(drm);
++	drm->mode_config.min_width = dk->mode.hdisplay;
++	drm->mode_config.min_height = dk->mode.vdisplay;
++	drm->mode_config.max_width = dk->mode.hdisplay;
++	drm->mode_config.max_height = dk->mode.vdisplay;
++	drm->mode_config.preferred_depth = 24;
++	drm->mode_config.funcs = &dk_mode_config_funcs;
++
++	drm_connector_helper_add(&dk->connector, &dk_conn_helper_funcs);
++	ret = drm_connector_init(drm, &dk->connector, &dk_conn_funcs,
++				 DRM_MODE_CONNECTOR_DSI);
++	if (ret)
++		goto err_config;
++
++	ret = drm_simple_display_pipe_init(drm, &dk->pipe, &dk_pipe_funcs,
++					   dk_formats, ARRAY_SIZE(dk_formats),
++					   NULL, &dk->connector);
++	if (ret)
++		goto err_config;
++
++	drm_mode_config_reset(drm);
++
++	ret = drm_dev_register(drm, 0);
++	if (ret)
++		goto err_config;
++
++	DRM_INFO("decon-kms: %ux%u on decon%d\n",
++		 dk->mode.hdisplay, dk->mode.vdisplay, decon->id);
++	return 0;
++
++err_config:
++	drm_mode_config_cleanup(drm);
++	drm_dev_unref(drm);
++err_free:
++	kfree(dk);
++	return ret;
++}
++late_initcall(decon_kms_init);
+diff --git a/include/uapi/linux/wait.h b/include/uapi/linux/wait.h
+index ac49a220c..85b809fc9 100644
+--- a/include/uapi/linux/wait.h
++++ b/include/uapi/linux/wait.h
+@@ -17,6 +17,7 @@
+ #define P_ALL		0
+ #define P_PID		1
+ #define P_PGID		2
++#define P_PIDFD		3
+ 
+ 
+ #endif /* _UAPI_LINUX_WAIT_H */
+diff --git a/kernel/exit.c b/kernel/exit.c
+index 586162211..2533da27a 100644
+--- a/kernel/exit.c
++++ b/kernel/exit.c
+@@ -1661,6 +1661,18 @@ static long do_wait(struct wait_opts *wo)
+ 	return retval;
+ }
+ 
++/* GLib >= 2.74 waits with P_PIDFD as soon as pidfd_open() exists, which this tree has */
++static struct pid *waitid_pidfd_get_pid(unsigned int fd)
++{
++	struct fd f = fdget(fd);
++	struct pid *pid = ERR_PTR(-EBADF);
++
++	if (f.file && f.file->f_op == &pidfd_fops)
++		pid = get_pid(f.file->private_data);
++	fdput(f);
++	return pid;
++}
++
+ static long kernel_waitid(int which, pid_t upid, struct waitid_info *infop,
+ 			  int options, struct rusage *ru)
+ {
+@@ -1683,19 +1695,26 @@ static long kernel_waitid(int which, pid_t upid, struct waitid_info *infop,
+ 		type = PIDTYPE_PID;
+ 		if (upid <= 0)
+ 			return -EINVAL;
++		pid = find_get_pid(upid);
+ 		break;
+ 	case P_PGID:
+ 		type = PIDTYPE_PGID;
+ 		if (upid <= 0)
+ 			return -EINVAL;
++		pid = find_get_pid(upid);
++		break;
++	case P_PIDFD:
++		type = PIDTYPE_PID;
++		if (upid < 0)
++			return -EINVAL;
++		pid = waitid_pidfd_get_pid(upid);
++		if (IS_ERR(pid))
++			return PTR_ERR(pid);
+ 		break;
+ 	default:
+ 		return -EINVAL;
+ 	}
+ 
+-	if (type < PIDTYPE_MAX)
+-		pid = find_get_pid(upid);
+-
+ 	wo.wo_type	= type;
+ 	wo.wo_pid	= pid;
+ 	wo.wo_flags	= options;
+diff --git a/net/bluetooth/Makefile b/net/bluetooth/Makefile
+index 2b080d390..fda41c0b4 100644
+--- a/net/bluetooth/Makefile
++++ b/net/bluetooth/Makefile
+@@ -4,10 +4,10 @@
+ #
+ 
+ obj-$(CONFIG_BT)	+= bluetooth.o
+-#obj-$(CONFIG_BT_RFCOMM)	+= rfcomm/
+-#obj-$(CONFIG_BT_BNEP)	+= bnep/
++obj-$(CONFIG_BT_RFCOMM)	+= rfcomm/
++obj-$(CONFIG_BT_BNEP)	+= bnep/
+ obj-$(CONFIG_BT_CMTP)	+= cmtp/
+-#obj-$(CONFIG_BT_HIDP)	+= hidp/
++obj-$(CONFIG_BT_HIDP)	+= hidp/
+ obj-$(CONFIG_BT_6LOWPAN) += bluetooth_6lowpan.o
+ 
+ bluetooth_6lowpan-y := 6lowpan.o
+diff --git a/net/bluetooth/hci_sock.c b/net/bluetooth/hci_sock.c
+index d23ee41be..b67fc4c44 100644
+--- a/net/bluetooth/hci_sock.c
++++ b/net/bluetooth/hci_sock.c
+@@ -39,7 +39,7 @@
+ static LIST_HEAD(mgmt_chan_list);
+ static DEFINE_MUTEX(mgmt_chan_list_lock);
+ 
+-// static DEFINE_IDA(sock_cookie_ida);
++static DEFINE_IDA(sock_cookie_ida);
+ 
+ static atomic_t monitor_promisc = ATOMIC_INIT(0);
+ 
+@@ -94,7 +94,7 @@ u32 hci_sock_get_cookie(struct sock *sk)
+ {
+ 	return hci_pi(sk)->cookie;
+ }
+-/*
++
+ static bool hci_sock_gen_cookie(struct sock *sk)
+ {
+ 	int id = hci_pi(sk)->cookie;
+@@ -121,7 +121,7 @@ static void hci_sock_free_cookie(struct sock *sk)
+ 		ida_simple_remove(&sock_cookie_ida, id);
+ 	}
+ }
+-*/
++
+ static inline int hci_test_bit(int nr, const void *addr)
+ {
+ 	return *((const __u32 *) addr + (nr >> 5)) & ((__u32) 1 << (nr & 31));
+@@ -486,7 +486,7 @@ static struct sk_buff *create_monitor_event(struct hci_dev *hdev, int event)
+ 
+ 	return skb;
+ }
+-/*
++
+ static struct sk_buff *create_monitor_ctrl_open(struct sock *sk)
+ {
+ 	struct hci_mon_hdr *hdr;
+@@ -495,7 +495,7 @@ static struct sk_buff *create_monitor_ctrl_open(struct sock *sk)
+ 	u8 ver[3];
+ 	u32 flags;
+ 
+-	// No message needed when cookie is not present
++	/* No message needed when cookie is not present */
+ 	if (!hci_pi(sk)->cookie)
+ 		return NULL;
+ 
+@@ -515,7 +515,7 @@ static struct sk_buff *create_monitor_ctrl_open(struct sock *sk)
+ 		mgmt_fill_version_info(ver);
+ 		break;
+ 	default:
+-		// No message for unsupported format
++		/* No message for unsupported format */
+ 		return NULL;
+ 	}
+ 
+@@ -550,7 +550,7 @@ static struct sk_buff *create_monitor_ctrl_close(struct sock *sk)
+ 	struct hci_mon_hdr *hdr;
+ 	struct sk_buff *skb;
+ 
+-	// No message needed when cookie is not present
++	/* No message needed when cookie is not present */
+ 	if (!hci_pi(sk)->cookie)
+ 		return NULL;
+ 
+@@ -560,7 +560,7 @@ static struct sk_buff *create_monitor_ctrl_close(struct sock *sk)
+ 	case HCI_CHANNEL_CONTROL:
+ 		break;
+ 	default:
+-		// No message for unsupported format
++		/* No message for unsupported format */
+ 		return NULL;
+ 	}
+ 
+@@ -582,7 +582,7 @@ static struct sk_buff *create_monitor_ctrl_close(struct sock *sk)
+ 
+ 	return skb;
+ }
+-*/
++
+ static struct sk_buff *create_monitor_ctrl_command(struct sock *sk, u16 index,
+ 						   u16 opcode, u16 len,
+ 						   const void *buf)
+@@ -609,7 +609,7 @@ static struct sk_buff *create_monitor_ctrl_command(struct sock *sk, u16 index,
+ 
+ 	return skb;
+ }
+-/*
++
+ static void __printf(2, 3)
+ send_monitor_note(struct sock *sk, const char *fmt, ...)
+ {
+@@ -703,7 +703,7 @@ static void send_monitor_control_replay(struct sock *mon_sk)
+ 
+ 	read_unlock(&hci_sk_list.lock);
+ }
+-*/
++
+ /* Generate internal stack event */
+ static void hci_si_event(struct hci_dev *hdev, int type, int dlen, void *data)
+ {
+@@ -823,7 +823,6 @@ EXPORT_SYMBOL(hci_mgmt_chan_unregister);
+ 
+ static int hci_sock_release(struct socket *sock)
+ {
+-    /*
+ 	struct sock *sk = sock->sk;
+ 	struct hci_dev *hdev;
+ 	struct sk_buff *skb;
+@@ -842,7 +841,7 @@ static int hci_sock_release(struct socket *sock)
+ 	case HCI_CHANNEL_RAW:
+ 	case HCI_CHANNEL_USER:
+ 	case HCI_CHANNEL_CONTROL:
+-		// Send event to monitor
++		/* Send event to monitor */
+ 		skb = create_monitor_ctrl_close(sk);
+ 		if (skb) {
+ 			hci_send_to_channel(HCI_CHANNEL_MONITOR, skb,
+@@ -859,15 +858,15 @@ static int hci_sock_release(struct socket *sock)
+ 	hdev = hci_pi(sk)->hdev;
+ 	if (hdev) {
+ 		if (hci_pi(sk)->channel == HCI_CHANNEL_USER) {
+-			// When releasing a user channel exclusive access,
+-			// call hci_dev_do_close directly instead of calling
+-			// hci_dev_close to ensure the exclusive access will
+-			// be released and the controller brought back down.
+-			//
+-			// The checking of HCI_AUTO_OFF is not needed in this
+-			// case since it will have been cleared already when
+-			// opening the user channel.
+-
++			/* When releasing a user channel exclusive access,
++			 * call hci_dev_do_close directly instead of calling
++			 * hci_dev_close to ensure the exclusive access will
++			 * be released and the controller brought back down.
++			 *
++			 * The checking of HCI_AUTO_OFF is not needed in this
++			 * case since it will have been cleared already when
++			 * opening the user channel.
++			 */
+ 			hci_dev_do_close(hdev);
+ 			hci_dev_clear_flag(hdev, HCI_USER_CHANNEL);
+ 			mgmt_index_added(hdev);
+@@ -880,10 +879,9 @@ static int hci_sock_release(struct socket *sock)
+ 	sock_orphan(sk);
+ 	release_sock(sk);
+ 	sock_put(sk);
+-    */
+ 	return 0;
+ }
+-/*
++
+ static int hci_sock_blacklist_add(struct hci_dev *hdev, void __user *arg)
+ {
+ 	bdaddr_t bdaddr;
+@@ -918,7 +916,7 @@ static int hci_sock_blacklist_del(struct hci_dev *hdev, void __user *arg)
+ 	return err;
+ }
+ 
+-// Ioctls that require bound socket
++/* Ioctls that require bound socket */
+ static int hci_sock_bound_ioctl(struct sock *sk, unsigned int cmd,
+ 				unsigned long arg)
+ {
+@@ -961,11 +959,10 @@ static int hci_sock_bound_ioctl(struct sock *sk, unsigned int cmd,
+ 
+ 	return -ENOIOCTLCMD;
+ }
+-*/
++
+ static int hci_sock_ioctl(struct socket *sock, unsigned int cmd,
+ 			  unsigned long arg)
+ {
+-    /*
+ 	void __user *argp = (void __user *)arg;
+ 	struct sock *sk = sock->sk;
+ 	int err;
+@@ -1007,12 +1004,12 @@ static int hci_sock_ioctl(struct socket *sock, unsigned int cmd,
+ 		goto done;
+ 	}
+ 
+-	// When calling an ioctl on an unbound raw socket, then ensure
+-	// that the monitor gets informed. Ensure that the resulting event
+-	// is only send once by checking if the cookie exists or not. The
+-	// socket cookie will be only ever generated once for the lifetime
+-	// of a given socket.
+-
++	/* When calling an ioctl on an unbound raw socket, then ensure
++	 * that the monitor gets informed. Ensure that the resulting event
++	 * is only send once by checking if the cookie exists or not. The
++	 * socket cookie will be only ever generated once for the lifetime
++	 * of a given socket.
++	 */
+ 	if (hci_sock_gen_cookie(sk)) {
+ 		struct sk_buff *skb;
+ 
+@@ -1026,7 +1023,7 @@ static int hci_sock_ioctl(struct socket *sock, unsigned int cmd,
+ 		if (sk_capable(sk, CAP_NET_ADMIN))
+ 			hci_sock_set_flag(sk, HCI_SOCK_TRUSTED);
+ 
+-		// Send event to monitor
++		/* Send event to monitor */
+ 		skb = create_monitor_ctrl_open(sk);
+ 		if (skb) {
+ 			hci_send_to_channel(HCI_CHANNEL_MONITOR, skb,
+@@ -1090,14 +1087,11 @@ static int hci_sock_ioctl(struct socket *sock, unsigned int cmd,
+ done:
+ 	release_sock(sk);
+ 	return err;
+-    */
+-	return 0;
+ }
+ 
+ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
+ 			 int addr_len)
+ {
+-    /*
+ 	struct sockaddr_hci haddr;
+ 	struct sock *sk = sock->sk;
+ 	struct hci_dev *hdev = NULL;
+@@ -1155,12 +1149,12 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
+ 		hci_pi(sk)->channel = haddr.hci_channel;
+ 
+ 		if (!hci_sock_gen_cookie(sk)) {
+-			// In the case when a cookie has already been assigned,
+-			// then there has been already an ioctl issued against
+-			// an unbound socket and with that triggered an open
+-			// notification. Send a close notification first to
+-			// allow the state transition to bounded.
+-
++			/* In the case when a cookie has already been assigned,
++			 * then there has been already an ioctl issued against
++			 * an unbound socket and with that triggerd an open
++			 * notification. Send a close notification first to
++			 * allow the state transition to bounded.
++			 */
+ 			skb = create_monitor_ctrl_close(sk);
+ 			if (skb) {
+ 				hci_send_to_channel(HCI_CHANNEL_MONITOR, skb,
+@@ -1174,7 +1168,7 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
+ 
+ 		hci_pi(sk)->hdev = hdev;
+ 
+-		// Send event to monitor
++		/* Send event to monitor */
+ 		skb = create_monitor_ctrl_open(sk);
+ 		if (skb) {
+ 			hci_send_to_channel(HCI_CHANNEL_MONITOR, skb,
+@@ -1226,13 +1220,13 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
+ 		err = hci_dev_open(hdev->id);
+ 		if (err) {
+ 			if (err == -EALREADY) {
+-				// In case the transport is already up and
+-				// running, clear the error here.
+-
+-				// This can happen when opening a user
+-				// channel and HCI_AUTO_OFF grace period
+-				// is still active.
+-
++				/* In case the transport is already up and
++				 * running, clear the error here.
++				 *
++				 * This can happen when opening a user
++				 * channel and HCI_AUTO_OFF grace period
++				 * is still active.
++				 */
+ 				err = 0;
+ 			} else {
+ 				hci_dev_clear_flag(hdev, HCI_USER_CHANNEL);
+@@ -1245,11 +1239,11 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
+ 		hci_pi(sk)->channel = haddr.hci_channel;
+ 
+ 		if (!hci_sock_gen_cookie(sk)) {
+-			// In the case when a cookie has already been assigned,
+-			// this socket will transition from a raw socket into
+-			// a user channel socket. For a clean transition, send
+-			// the close notification first.
+-
++			/* In the case when a cookie has already been assigned,
++			 * this socket will transition from a raw socket into
++			 * a user channel socket. For a clean transition, send
++			 * the close notification first.
++			 */
+ 			skb = create_monitor_ctrl_close(sk);
+ 			if (skb) {
+ 				hci_send_to_channel(HCI_CHANNEL_MONITOR, skb,
+@@ -1258,14 +1252,14 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
+ 			}
+ 		}
+ 
+-		// The user channel is restricted to CAP_NET_ADMIN
+-		// capabilities and with that implicitly trusted.
+-
++		/* The user channel is restricted to CAP_NET_ADMIN
++		 * capabilities and with that implicitly trusted.
++		 */
+ 		hci_sock_set_flag(sk, HCI_SOCK_TRUSTED);
+ 
+ 		hci_pi(sk)->hdev = hdev;
+ 
+-		// Send event to monitor
++		/* Send event to monitor */
+ 		skb = create_monitor_ctrl_open(sk);
+ 		if (skb) {
+ 			hci_send_to_channel(HCI_CHANNEL_MONITOR, skb,
+@@ -1289,9 +1283,9 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
+ 
+ 		hci_pi(sk)->channel = haddr.hci_channel;
+ 
+-		// The monitor interface is restricted to CAP_NET_RAW
+-		// capabilities and with that implicitly trusted.
+-
++		/* The monitor interface is restricted to CAP_NET_RAW
++		 * capabilities and with that implicitly trusted.
++		 */
+ 		hci_sock_set_flag(sk, HCI_SOCK_TRUSTED);
+ 
+ 		send_monitor_note(sk, "Linux version %s (%s)",
+@@ -1330,34 +1324,34 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
+ 			goto done;
+ 		}
+ 
+-		// Users with CAP_NET_ADMIN capabilities are allowed
+-		// access to all management commands and events. For
+-		// untrusted users the interface is restricted and
+-		// also only untrusted events are sent.
+-
++		/* Users with CAP_NET_ADMIN capabilities are allowed
++		 * access to all management commands and events. For
++		 * untrusted users the interface is restricted and
++		 * also only untrusted events are sent.
++		 */
+ 		if (capable(CAP_NET_ADMIN))
+ 			hci_sock_set_flag(sk, HCI_SOCK_TRUSTED);
+ 
+ 		hci_pi(sk)->channel = haddr.hci_channel;
+ 
+-		// At the moment the index and unconfigured index events
+-		// are enabled unconditionally. Setting them on each
+-		// socket when binding keeps this functionality. They
+-		// however might be cleared later and then sending of these
+-		// events will be disabled, but that is then intentional.
+-
+-		// This also enables generic events that are safe to be
+-		// received by untrusted users. Example for such events
+-		// are changes to settings, class of device, name etc.
+-
++		/* At the moment the index and unconfigured index events
++		 * are enabled unconditionally. Setting them on each
++		 * socket when binding keeps this functionality. They
++		 * however might be cleared later and then sending of these
++		 * events will be disabled, but that is then intentional.
++		 *
++		 * This also enables generic events that are safe to be
++		 * received by untrusted users. Example for such events
++		 * are changes to settings, class of device, name etc.
++		 */
+ 		if (hci_pi(sk)->channel == HCI_CHANNEL_CONTROL) {
+ 			if (!hci_sock_gen_cookie(sk)) {
+-				// In the case when a cookie has already been
+-				// assigned, this socket will transition from
+-				// a raw socket into a control socket. To
+-				// allow for a clean transition, send the
+-				// close notification first.
+-
++				/* In the case when a cookie has already been
++				 * assigned, this socket will transtion from
++				 * a raw socket into a control socket. To
++				 * allow for a clean transtion, send the
++				 * close notification first.
++				 */
+ 				skb = create_monitor_ctrl_close(sk);
+ 				if (skb) {
+ 					hci_send_to_channel(HCI_CHANNEL_MONITOR, skb,
+@@ -1366,7 +1360,7 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
+ 				}
+ 			}
+ 
+-			// Send event to monitor
++			/* Send event to monitor */
+ 			skb = create_monitor_ctrl_open(sk);
+ 			if (skb) {
+ 				hci_send_to_channel(HCI_CHANNEL_MONITOR, skb,
+@@ -1389,14 +1383,11 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
+ done:
+ 	release_sock(sk);
+ 	return err;
+-    */
+-    return 0;
+ }
+ 
+ static int hci_sock_getname(struct socket *sock, struct sockaddr *addr,
+ 			    int *addr_len, int peer)
+ {
+-    /*
+ 	struct sockaddr_hci *haddr = (struct sockaddr_hci *)addr;
+ 	struct sock *sk = sock->sk;
+ 	struct hci_dev *hdev;
+@@ -1423,8 +1414,6 @@ static int hci_sock_getname(struct socket *sock, struct sockaddr *addr,
+ done:
+ 	release_sock(sk);
+ 	return err;
+-    */
+-    return 0;
+ }
+ 
+ static void hci_sock_cmsg(struct sock *sk, struct msghdr *msg,
+@@ -2058,7 +2047,6 @@ static struct proto hci_sk_proto = {
+ static int hci_sock_create(struct net *net, struct socket *sock, int protocol,
+ 			   int kern)
+ {
+-    /*
+ 	struct sock *sk;
+ 
+ 	BT_DBG("sock %p", sock);
+@@ -2083,7 +2071,6 @@ static int hci_sock_create(struct net *net, struct socket *sock, int protocol,
+ 	sk->sk_destruct = hci_sock_destruct;
+ 
+ 	bt_sock_link(&hci_sk_list, sk);
+-    */
+ 	return 0;
+ }
+ 
+diff --git a/scripts/mkcompile_h b/scripts/mkcompile_h
+index 6fe2787d1..0ff3ba63b 100755
+--- a/scripts/mkcompile_h
++++ b/scripts/mkcompile_h
+@@ -78,7 +78,7 @@ UTS_TRUNCATE="cut -b -$UTS_LEN"
+   echo \#define LINUX_COMPILE_BY \"`echo $LINUX_COMPILE_BY | $UTS_TRUNCATE`\"
+   echo \#define LINUX_COMPILE_HOST \"`echo $LINUX_COMPILE_HOST | $UTS_TRUNCATE`\"
+ 
+-  CC_VERSION=$($CC -v 2>&1 | grep ' version ' | sed 's/[[:space:]]*$//')
++  CC_VERSION=$($CC -v 2>&1 | grep ' version ' | head -n 1 | sed 's/[[:space:]]*$//')
+   LD_VERSION=$($LD -v | head -n1 | sed 's/(compatible with [^)]*)//' \
+ 		      | sed 's/[[:space:]]*$//')
+   printf '#define LINUX_COMPILER "%s"\n' "$CC_VERSION, $LD_VERSION"

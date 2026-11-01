@@ -1,0 +1,4 @@
+#!/bin/sh
+# Run a command as root on the tablet. Address: PC hotspot HIBY (GTA4XL_IP overrides).
+exec ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=8 \
+  -o BatchMode=yes -o LogLevel=ERROR "root@${GTA4XL_IP:-10.42.0.125}" "$@"

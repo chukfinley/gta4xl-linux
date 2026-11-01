@@ -1,0 +1,5 @@
+# The Himax driver also declares key codes. libinput then treats the touchscreen as a keyboard
+# and Xorg adds it as type KEYBOARD, so taps do nothing.
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="sec_touchscreen", ENV{ID_INPUT_KEY}="", ENV{ID_INPUT_KEYBOARD}="", ENV{ID_INPUT_TOUCHSCREEN}="1"
+# Sensor and notifier nodes are no user input
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="grip_*|meta_event", ENV{LIBINPUT_IGNORE_DEVICE}="1"
