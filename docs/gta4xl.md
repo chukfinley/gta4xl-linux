@@ -121,3 +121,16 @@ The LineageOS recovery entry "Reboot to bootloader" is a fastbootd that accepts 
 - Panel format: the screenshot tool assumes XRGB8888, colours in `tab-shot` can be swapped when
   mutter picks another format.
 - A heavy build on all cores makes WLAN drop packets. Check that before you suspect the driver.
+
+## GPU (Mali-G72 r0p1, kbase r38p1) with Panfork
+
+Build on the tablet: `tools/tablet/build-panfork.sh`, install to `/opt/panfork`, patch
+`gpu/panfork-jm.patch`. Test: `LD_LIBRARY_PATH=/opt/panfork/lib LIBGL_DRIVERS_PATH=/opt/panfork/lib/dri
+GBM_BACKENDS_PATH=/opt/panfork/lib/gbm __EGL_VENDOR_LIBRARY_DIRS=/opt/panfork/share/glvnd/egl_vendor.d
+MESA_LOADER_DRIVER_OVERRIDE=exynos glmark2-es2-drm --off-screen -b build`. Panfork opens /dev/mali0
+through kmsro when the driver name is exynos.
+
+Fixed for JM on v6: unreachable() after the IDVS branch, heap bottom without +64, fence compare
+and job sequence start, committed tiler heap.
+State: renderer is "Mali-G72 (Panfrost)", the clear scene reaches 600 FPS. Draws with shaders
+hang until hard stop (TERMINATED), buffers are then freed and the GPU page-faults at the job header.

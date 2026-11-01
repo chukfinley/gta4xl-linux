@@ -1,0 +1,95 @@
+diff -ru src/panfrost/base/pan_vX_base.c /opt/src/panfork/src/panfrost/base/pan_vX_base.c
+--- a/src/panfrost/base/pan_vX_base.c	2022-12-10 01:57:43.000000000 +0100
++++ a/src/panfrost/base/pan_vX_base.c	2026-11-01 02:21:47.173194996 +0100
+@@ -607,10 +607,10 @@
+         if (pan_flags & PANFROST_BO_HEAP) {
+                 size_t align_size = 2 * 1024 * 1024 / k->page_size; /* 2 MB */
+ 
++                /* Fully committed: the exynos kbase never completes a tiler heap fault */
+                 a.in.va_pages = ALIGN_POT(a.in.va_pages, align_size);
+-                a.in.commit_pages = 0;
+-                a.in.extension = align_size;
+-                flags |= BASE_MEM_GROW_ON_GPF;
++                a.in.commit_pages = a.in.va_pages;
++                a.in.extension = 0;
+         }
+ 
+ #if PAN_BASE_API >= 1
+@@ -851,7 +851,8 @@
+         list_for_each_entry_safe(struct kbase_fence, fence, &o->fences, link) {
+                 uint64_t value = k->event_slots[fence->slot].last;
+ 
+-                if (value > fence->value) {
++                /* JM events carry the sequence number of the finished atom itself */
++                if (value >= fence->value) {
+                         LOG("syncobj %p slot %u value %"PRIu64" vs %"PRIu64"\n",
+                             o, fence->slot, fence->value, value);
+ 
+@@ -1138,7 +1139,7 @@
+         struct base_jd_atom_v2 atom = {
+                 .jc = va,
+                 .atom_number = nr,
+-                .udata.blob[0] = k->job_seq++,
++                .udata.blob[0] = ++k->job_seq,
+         };
+ 
+         for (unsigned i = 0; i < KBASE_SLOT_COUNT; ++i)
+Nur in /opt/src/panfork/src/panfrost/bifrost: __pycache__.
+Nur in /opt/src/panfork/src/panfrost/bifrost/valhall: __pycache__.
+diff -ru src/panfrost/lib/genxml/decode.c /opt/src/panfork/src/panfrost/lib/genxml/decode.c
+--- a/src/panfrost/lib/genxml/decode.c	2022-12-10 01:57:43.000000000 +0100
++++ a/src/panfrost/lib/genxml/decode.c	2026-11-01 02:19:56.992215576 +0100
+@@ -1257,7 +1257,14 @@
+ 
+                 /* Ensure the job is marked COMPLETE */
+                 if (h.exception_status != 0x1) {
+-                        fprintf(stderr, "Incomplete job or timeout\n");
++                        fprintf(stderr, "Incomplete job: jc %"PRIx64" type %u status 0x%x fault %"PRIx64"\n",
++                                jc_gpu_va, h.type, h.exception_status, (uint64_t)h.fault_pointer);
++                        if (h.fault_pointer) {
++                                uint32_t *w = PANDECODE_PTR(h.fault_pointer, uint32_t);
++                                for (int i = 0; i < 32; i += 4)
++                                        fprintf(stderr, "  +%02x: %08x %08x %08x %08x\n", i * 4,
++                                                w[i], w[i + 1], w[i + 2], w[i + 3]);
++                        }
+                         fflush(NULL);
+                         abort();
+                 }
+diff -ru src/panfrost/lib/pan_cs.c /opt/src/panfork/src/panfrost/lib/pan_cs.c
+--- a/src/panfrost/lib/pan_cs.c	2022-12-10 01:57:43.000000000 +0100
++++ a/src/panfrost/lib/pan_cs.c	2026-11-01 02:15:06.342648569 +0100
+@@ -958,7 +958,7 @@
+         pan_pack(out, TILER_HEAP, heap) {
+                 heap.size = dev->tiler_heap->size;
+                 heap.base = dev->tiler_heap->ptr.gpu;
+-                heap.bottom = dev->tiler_heap->ptr.gpu + 64;
++                heap.bottom = dev->tiler_heap->ptr.gpu;
+                 heap.top = dev->tiler_heap->ptr.gpu + dev->tiler_heap->size;
+         }
+ }
+diff -ru src/panfrost/lib/pan_props.c /opt/src/panfork/src/panfrost/lib/pan_props.c
+--- a/src/panfrost/lib/pan_props.c	2022-12-10 01:57:43.000000000 +0100
++++ a/src/panfrost/lib/pan_props.c	2026-11-01 02:21:47.177194886 +0100
+@@ -359,7 +359,7 @@
+          * shared across batches/contextes */
+ 
+         if (dev->arch < 10)
+-                dev->tiler_heap = panfrost_bo_create(dev, 128 * 1024 * 1024,
++                dev->tiler_heap = panfrost_bo_create(dev, 48 * 1024 * 1024,
+                                              PAN_BO_INVISIBLE | PAN_BO_GROWABLE, "Tiler heap");
+ 
+         pthread_mutex_init(&dev->submit_lock, NULL);
+diff -ru src/gallium/drivers/panfrost/pan_cmdstream.c /opt/src/panfork/src/gallium/drivers/panfrost/pan_cmdstream.c
+--- a/src/gallium/drivers/panfrost/pan_cmdstream.c	2022-12-10 01:57:43.000000000 +0100
++++ a/src/gallium/drivers/panfrost/pan_cmdstream.c	2026-11-01 02:11:43.838898053 +0100
+@@ -4208,8 +4208,9 @@
+         if (idvs) {
+ #if PAN_ARCH >= 6
+                 tiler = pan_pool_alloc_desc(&batch->pool.base, INDEXED_VERTEX_JOB);
+-#endif
++#else
+                 unreachable("IDVS is unsupported on Midgard");
++#endif
+         } else {
+                 vertex = pan_pool_alloc_desc_cs_v10(&batch->pool.base, COMPUTE_JOB);
+                 tiler = pan_pool_alloc_desc_cs_v10(&batch->pool.base, TILER_JOB);
