@@ -256,6 +256,14 @@ Results on 2026-11-01: 5 of 5 cycles of `systemctl suspend` with 30 s RTC wake, 
 panel off on battery, the panel came back on after resume. Power key wake is not tested, that
 needs hands.
 
+Power, measured with `batt_slate_mode` 1 at about 4.28 V: awake with the panel off and WLAN on about
+130 mA (0.55 W), the voltage fell 15 mV in 10 min. In 10 min of sleep the voltage did not fall. There
+is no number in mA for sleep: at full charge the fuel gauge reports 0x6400 all the time, and it
+cannot read while the system sleeps. For a number, start below 95 % and compare the SOC.
+
+Open: each sleep logs "MIF blocked. prev_conn_req: 0x1" and `mif_count` stays 0, so the memory bus
+does not go down. CP_STAT is 1, and Linux never boots the modem. This can cost battery in sleep.
+
 Wake sources: Power (`gpio-key,wakeup` in the DT, `gpio_keys` simulates the press), PMIC RTC. Check
 after a sleep: `dmesg | grep "Resume caused"`, `/sys/power/suspend_stats`.
 
