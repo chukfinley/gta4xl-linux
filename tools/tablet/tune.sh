@@ -39,6 +39,8 @@ cat > /home/user/.config/brave-flags.conf <<'CONF'
 --disk-cache-size=104857600
 CONF
 chown user:user /home/user/.config/brave-flags.conf
+# Node priority selects the default sink. A saved choice would pin the speaker over headphones.
+rm -f /home/user/.local/state/wireplumber/default-nodes
 echo 'vm.swappiness=100' > /etc/sysctl.d/90-gta4xl.conf
 sysctl -q -p /etc/sysctl.d/90-gta4xl.conf
 sed -i 's#^Exec=/usr/bin/brave-browser-stable#Exec=/usr/local/bin/brave-browser#' /usr/share/applications/brave-browser.desktop

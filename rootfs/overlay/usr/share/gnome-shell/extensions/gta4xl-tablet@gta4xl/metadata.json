@@ -1,7 +1,7 @@
 {
   "uuid": "gta4xl-tablet@gta4xl",
   "name": "Tablet gestures",
-  "description": "Bottom edge swipe, touch resize, Night Light without a gamma LUT",
+  "description": "Bottom edge swipe, touch resize, secondary click, on-screen keyboard rule, Night Light shader",
   "shell-version": [
     "46"
   ],

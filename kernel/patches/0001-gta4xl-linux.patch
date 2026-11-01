@@ -51,6 +51,18 @@ index 2b0073be6..071a52d6b 100644
  
  	DRM_IOCTL_DEF(DRM_IOCTL_MODE_GETPLANERESOURCES, drm_mode_getplane_res, DRM_CONTROL_ALLOW|DRM_UNLOCKED),
  	DRM_IOCTL_DEF(DRM_IOCTL_MODE_GETCRTC, drm_mode_getcrtc, DRM_CONTROL_ALLOW|DRM_UNLOCKED),
+diff --git a/drivers/gpu/drm/drm_simple_kms_helper.c b/drivers/gpu/drm/drm_simple_kms_helper.c
+index dc9fd109d..990c3437d 100644
+--- a/drivers/gpu/drm/drm_simple_kms_helper.c
++++ b/drivers/gpu/drm/drm_simple_kms_helper.c
+@@ -84,6 +84,7 @@ static const struct drm_crtc_funcs drm_simple_kms_crtc_funcs = {
+ 	.page_flip = drm_atomic_helper_page_flip,
+ 	.atomic_duplicate_state = drm_atomic_helper_crtc_duplicate_state,
+ 	.atomic_destroy_state = drm_atomic_helper_crtc_destroy_state,
++	.gamma_set = drm_atomic_helper_legacy_gamma_set,
+ };
+ 
+ static int drm_simple_kms_plane_atomic_check(struct drm_plane *plane,
 diff --git a/drivers/input/touchscreen/himax/himax_83102E/himax_common.c b/drivers/input/touchscreen/himax/himax_83102E/himax_common.c
 index bc2acba5d..7f3f92790 100644
 --- a/drivers/input/touchscreen/himax/himax_83102E/himax_common.c
@@ -643,10 +655,10 @@ index 0b0b0a96e..419c44130 100644
  	int ret;
 diff --git a/drivers/video/fbdev/exynos/dpu20/decon_kms.c b/drivers/video/fbdev/exynos/dpu20/decon_kms.c
 new file mode 100644
-index 000000000..3672d68ae
+index 000000000..79acfbd2d
 --- /dev/null
 +++ b/drivers/video/fbdev/exynos/dpu20/decon_kms.c
-@@ -0,0 +1,544 @@
+@@ -0,0 +1,558 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Minimal DRM/KMS front end for the Exynos DPU20 DECON fbdev driver.
@@ -665,6 +677,7 @@ index 000000000..3672d68ae
 +
 +#include <drm/drmP.h>
 +#include <drm/drm_atomic_helper.h>
++#include <drm/drm_color_mgmt.h>
 +#include <drm/drm_crtc_helper.h>
 +#include <drm/drm_gem.h>
 +#include <drm/drm_gem_framebuffer_helper.h>
@@ -672,6 +685,8 @@ index 000000000..3672d68ae
 +
 +#include "decon.h"
 +#include "dsim.h"
++
++#define DK_GAMMA_SIZE 256
 +
 +struct dk_device {
 +	struct drm_device *drm;
@@ -1172,6 +1187,17 @@ index 000000000..3672d68ae
 +					   NULL, &dk->connector);
 +	if (ret)
 +		goto err_config;
++
++	/*
++	 * Mutter reports Night Light as supported only with a gamma LUT. DECON has no LUT (no DQE
++	 * driver in dpu20), so the LUT is accepted and ignored. The shell extension tints with a
++	 * shader, so the colour does not apply twice. A commit with only GAMMA_LUT still reaches
++	 * dk_pipe_update and sends its event: the simple pipe adds the plane to each CRTC commit.
++	 */
++	ret = drm_mode_crtc_set_gamma_size(&dk->pipe.crtc, DK_GAMMA_SIZE);
++	if (ret)
++		goto err_config;
++	drm_crtc_enable_color_mgmt(&dk->pipe.crtc, 0, false, DK_GAMMA_SIZE);
 +
 +	drm_mode_config_reset(drm);
 +

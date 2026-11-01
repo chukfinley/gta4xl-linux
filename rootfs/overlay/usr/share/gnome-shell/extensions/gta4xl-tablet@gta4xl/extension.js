@@ -1,8 +1,11 @@
 // A swipe from the bottom edge toggles the overview. GNOME uses this edge for the on-screen
 // keyboard, which also opens by itself in text fields, so its action is taken off the stage.
 //
-// Night Light: DECON has no gamma LUT in this kernel, so mutter cannot apply the temperature
-// that gsd-color computes. A shader on the whole UI multiplies the colours instead.
+// Night Light: the kernel offers a gamma LUT only so that mutter and Settings accept Night Light.
+// DECON ignores the LUT, a shader on the whole UI multiplies the colours instead.
+//
+// Long press and two finger tap give a secondary click in app windows, see TouchSecondary.
+// GJS OSK runs only while no physical keyboard is connected, see _syncOsk.
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -149,6 +152,157 @@ class ResizeHandle {
     }
 }
 
+// A secondary click from touch, for all apps. It works in the compositor because few Wayland apps
+// have their own long press, and none has a two finger tap.
+const LONG_PRESS_MS = 450; // before the 500 ms timers of GTK and Chromium
+const TWO_FINGER_TAP_MS = 350;
+const TOUCH_SLOP = 16;
+const BOTTOM_EDGE = 24; // EdgeDragAction starts here
+const CLICK_STEP_MS = 30;
+
+function inAppWindow(event) {
+    for (let a = global.stage.get_event_actor(event); a; a = a.get_parent()) {
+        if (a instanceof Meta.WindowActor)
+            return true;
+    }
+    return false;
+}
+
+class TouchSecondary {
+    constructor() {
+        const seat = Clutter.get_default_backend().get_default_seat();
+        this._pointer = seat.create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
+        // Mutter has no API to cancel touch points. It sends wl_touch.cancel when a stage gesture
+        // begins, so this action only exists to emit gesture-begin. With 9 points Clutter never
+        // starts it. The tracker resets itself when the last finger goes up.
+        this._canceller = new Clutter.GestureAction({n_touch_points: 9});
+        global.stage.add_action_full('gta4xl-touch-cancel', Clutter.EventPhase.CAPTURE,
+            this._canceller);
+        this._touches = new Map();
+        this._sources = new Set();
+        this._eventId = global.stage.connect('captured-event', (_s, event) => {
+            this._onEvent(event);
+            return Clutter.EVENT_PROPAGATE;
+        });
+    }
+
+    _allowed() {
+        return this._inApp && !Main.overview.visible && !Main.sessionMode.isLocked &&
+            Main.modalCount === 0;
+    }
+
+    _later(ms, callback) {
+        const id = GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => {
+            this._sources.delete(id);
+            callback();
+            return GLib.SOURCE_REMOVE;
+        });
+        this._sources.add(id);
+        return id;
+    }
+
+    _clearTimer() {
+        if (this._timer) {
+            GLib.source_remove(this._timer);
+            this._sources.delete(this._timer);
+        }
+        this._timer = 0;
+    }
+
+    _click(x, y) {
+        // The pointer must enter the surface first, the client needs the serial of the press
+        this._pointer.notify_absolute_motion(Clutter.CURRENT_TIME, x, y);
+        this._later(CLICK_STEP_MS, () => {
+            this._pointer.notify_button(Clutter.CURRENT_TIME, Clutter.BUTTON_SECONDARY,
+                Clutter.ButtonState.PRESSED);
+            this._later(CLICK_STEP_MS, () => {
+                this._pointer.notify_button(Clutter.CURRENT_TIME, Clutter.BUTTON_SECONDARY,
+                    Clutter.ButtonState.RELEASED);
+            });
+        });
+    }
+
+    _onLongPress() {
+        this._timer = 0;
+        if (this._touches.size !== 1 || !this._allowed())
+            return;
+        const [touch] = this._touches.values();
+        this._pendingClick = [touch.x, touch.y];
+        this._canceller.emit('gesture-begin', global.stage);
+    }
+
+    _onEvent(event) {
+        const type = event.type();
+        if (type !== Clutter.EventType.TOUCH_BEGIN && type !== Clutter.EventType.TOUCH_UPDATE &&
+            type !== Clutter.EventType.TOUCH_END && type !== Clutter.EventType.TOUCH_CANCEL)
+            return;
+        const slot = event.get_event_sequence()?.get_slot();
+        if (slot === undefined)
+            return;
+        const [x, y] = event.get_coords();
+        const now = GLib.get_monotonic_time() / 1000;
+
+        if (type === Clutter.EventType.TOUCH_BEGIN) {
+            if (this._touches.size === 0) {
+                this._start = now;
+                this._inApp = inAppWindow(event);
+                this._pendingClick = null;
+                this._tapOk = true;
+                this._peak = 0;
+            }
+            this._touches.set(slot, {x, y, startX: x, startY: y});
+            this._peak = Math.max(this._peak, this._touches.size);
+            if (this._touches.size === 1) {
+                if (this._allowed() && y < global.stage.height - BOTTOM_EDGE)
+                    this._timer = this._later(LONG_PRESS_MS, () => this._onLongPress());
+            } else {
+                this._clearTimer();
+                if (this._touches.size > 2 || now - this._start > TWO_FINGER_TAP_MS)
+                    this._tapOk = false;
+                const [a, b] = this._touches.values();
+                this._middle = [(a.x + b.x) / 2, (a.y + b.y) / 2];
+            }
+            return;
+        }
+
+        const touch = this._touches.get(slot);
+        if (!touch)
+            return;
+        if (type === Clutter.EventType.TOUCH_UPDATE) {
+            touch.x = x;
+            touch.y = y;
+            if (Math.abs(x - touch.startX) > TOUCH_SLOP ||
+                Math.abs(y - touch.startY) > TOUCH_SLOP) {
+                this._clearTimer();
+                this._tapOk = false;
+            }
+            return;
+        }
+
+        this._touches.delete(slot);
+        this._clearTimer();
+        if (type === Clutter.EventType.TOUCH_CANCEL)
+            this._tapOk = false;
+        if (this._touches.size > 0 || !this._allowed())
+            return;
+        // With a finger still down mutter drops the pointer focus and the press gets lost, so the
+        // long press clicks when the finger goes up. The client already got wl_touch.cancel.
+        if (this._pendingClick)
+            this._click(...this._pendingClick);
+        else if (this._peak === 2 && this._tapOk && now - this._start <= TWO_FINGER_TAP_MS)
+            this._click(...this._middle);
+    }
+
+    destroy() {
+        global.stage.disconnect(this._eventId);
+        this._sources.forEach(id => GLib.source_remove(id));
+        this._sources.clear();
+        global.stage.remove_action_by_name('gta4xl-touch-cancel');
+        this._canceller = null;
+        this._pointer = null;
+    }
+}
+
 // PIN pad on the lock screen. The user password is the PIN, PAM stays unchanged.
 const PIN_LENGTH = 4;
 
@@ -193,6 +347,19 @@ function addPinPad(dialog) {
     prompt._gta4xlPad = pad;
 }
 
+// GJS OSK replaces the GNOME keyboard. It has no rule for a physical keyboard, its setting
+// "never" still opens it for a touch on a shell text field, so it is turned off completely.
+const OSK_UUID = 'gjsosk@vishram1123.com';
+const OSK_SYNC_MS = 1000;
+const NOT_A_KEYBOARD = /^(gpio_keys|sec_touchscreen|sec_e-pen|hall|.*Headset Jack|.*\(AVRCP\))$/;
+
+function physicalKeyboard(seat) {
+    return seat.list_devices().some(device =>
+        device.get_device_type() === Clutter.InputDeviceType.KEYBOARD_DEVICE &&
+        device.get_device_mode() !== Clutter.InputMode.LOGICAL &&
+        device.get_device_node() && !NOT_A_KEYBOARD.test(device.get_device_name()));
+}
+
 const COLOR_NAME = 'org.gnome.SettingsDaemon.Color';
 const COLOR_PATH = '/org/gnome/SettingsDaemon/Color';
 
@@ -209,6 +376,37 @@ export default class TabletGestures {
             Main.layoutManager.uiGroup.remove_effect_by_name('gta4xl-night');
         }
         this._nightOn = on;
+    }
+
+    // The GNOME action comes back when GJS OSK stops, it must not compete with the overview swipe
+    _dropOskAction() {
+        const action = global.stage.get_action('osk');
+        if (action) {
+            this._osk ??= action;
+            global.stage.remove_action_by_name('osk');
+        }
+    }
+
+    _syncOsk() {
+        const manager = Main.extensionManager;
+        if (!manager.lookup(OSK_UUID) || Main.sessionMode.isLocked)
+            return;
+        const wanted = !physicalKeyboard(this._seat);
+        const enabled = global.settings.get_strv('enabled-extensions').includes(OSK_UUID);
+        if (wanted && !enabled)
+            manager.enableExtension(OSK_UUID);
+        else if (!wanted && enabled)
+            manager.disableExtension(OSK_UUID);
+    }
+
+    _queueSyncOsk() {
+        if (this._oskSyncId)
+            GLib.source_remove(this._oskSyncId);
+        this._oskSyncId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, OSK_SYNC_MS, () => {
+            this._oskSyncId = 0;
+            this._syncOsk();
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     _onWindowCreated(win) {
@@ -230,12 +428,12 @@ export default class TabletGestures {
             addPinPad(this);
         };
 
-        // The PIN pad replaces the on-screen keyboard on the lock screen
+        // The PIN pad replaces the on-screen keyboard on the lock screen, GJS OSK the rest
         const keyboard = Keyboard.Keyboard.prototype;
         const open = keyboard.open;
         this._keyboardOpen = open;
         keyboard.open = function (...args) {
-            if (!Main.sessionMode.isLocked)
+            if (!Main.sessionMode.isLocked && !Main.extensionManager.lookup(OSK_UUID))
                 open.apply(this, args);
         };
 
@@ -249,6 +447,7 @@ export default class TabletGestures {
         }
 
         this._handle = new ResizeHandle();
+        this._secondary = new TouchSecondary();
         this._windowId = global.display.connect('window-created',
             (_d, win) => this._onWindowCreated(win));
         this._night = new NightEffect();
@@ -261,13 +460,19 @@ export default class TabletGestures {
                 this._syncNightLight();
             });
 
-        this._osk = global.stage.get_action('osk');
-        if (this._osk)
-            global.stage.remove_action_by_name('osk');
+        this._osk = null;
+        this._dropOskAction();
         const modes = Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW;
         this._action = new EdgeDragAction.EdgeDragAction(St.Side.BOTTOM, modes);
         this._action.connect('activated', () => Main.overview.toggle());
         global.stage.add_action_full('gta4xl-overview', Clutter.EventPhase.CAPTURE, this._action);
+
+        this._seat = Clutter.get_default_backend().get_default_seat();
+        this._seatIds = ['device-added', 'device-removed']
+            .map(signal => this._seat.connect(signal, () => this._queueSyncOsk()));
+        this._extensionId = Main.extensionManager.connect('extension-state-changed',
+            () => this._dropOskAction());
+        this._queueSyncOsk();
     }
 
     disable() {
@@ -276,6 +481,14 @@ export default class TabletGestures {
         global.display.disconnect(this._windowId);
         this._handle.destroy();
         this._handle = null;
+        this._secondary.destroy();
+        this._secondary = null;
+        this._seatIds.forEach(id => this._seat.disconnect(id));
+        this._seat = null;
+        Main.extensionManager.disconnect(this._extensionId);
+        if (this._oskSyncId)
+            GLib.source_remove(this._oskSyncId);
+        this._oskSyncId = 0;
         if (this._color)
             this._color.disconnect(this._colorId);
         this._color = null;
