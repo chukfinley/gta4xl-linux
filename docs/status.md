@@ -21,12 +21,14 @@ Date of this state: 2026-11-01, 22:50. Update this file at each milestone.
 
 Installed: Brave, YouTube web app, T3 Code, Zed (GPU), Terminal, Thunderbird with calendar, Signal, Jellyfin, 0 A.D., Krita, GIMP, Inkscape, MyPaint, Xournal++, Rnote, Drawing, Audacity, Shotcut, the Craft apps, ArtCraft native client, notebookllm, Akku-Statistik.
 
-Removed: Waydroid, Spotify (optional with `WITH_SPOTIFY=1`), Kdenlive, Dash to Dock, GJS OSK, web apps for Claude, Bitwarden and T3 Chat.
+Removed: Waydroid, Spotify (optional with `WITH_SPOTIFY=1`), Kdenlive, GNOME Shell, gdm, GNOME Settings, web apps for Claude, Bitwarden and T3 Chat.
 
 User login steps are open for Signal, Jellyfin, Thunderbird and the Nextcloud calendar.
 
 ## Desktop
 
-The tablet boots into the Wayfire desktop (`~/git/tablet-desktop`, not published): `tablet-session.service`, Wayfire 0.9.0 in `/opt/wayfire`, plugin and clients in `/opt/tablet-desktop`. State and open list: `docs/status.md` in that repo.
+Own desktop on Wayfire 0.9 with an own plugin and Qt Quick clients: repo `~/git/tablet-desktop`, local, not published. GNOME Shell, gdm and GNOME Settings are removed. Nautilus stays as Files. Tablet Shell (`~/git/tablet-shell`) is stopped.
 
-GNOME Shell, gdm and GNOME Settings are removed. GTK apps and their libraries stay. A failed session restarts, SSH over Tailscale does not depend on it.
+State files in that repo: `docs/status.md`, `docs/feature-list.md`, `docs/gestures.md`, `docs/gnome-design.md`, `docs/audit.md`, `docs/design-review.md`.
+
+The look follows upstream GNOME (gnome-shell 51.1, libadwaita 1.10), with touch sizes. The audit of 2026-11-01 found 28 bugs, and all are closed. Several fixes are not tested with a real finger. Open: RAM in use with apps open (about 1.6 GB, 989 MB after boot), hidden window pill, recent apps in the Dock, pen.
