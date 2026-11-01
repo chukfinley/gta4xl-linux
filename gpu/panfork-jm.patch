@@ -1,3 +1,24 @@
+diff -ru a/src/egl/drivers/dri2/platform_surfaceless.c b/src/egl/drivers/dri2/platform_surfaceless.c
+--- a/src/egl/drivers/dri2/platform_surfaceless.c	2022-12-10 01:57:43.000000000 +0100
++++ b/src/egl/drivers/dri2/platform_surfaceless.c	2026-11-01 02:57:09.926592837 +0100
+@@ -247,10 +247,15 @@
+    for (i = 0; i < num_devices; ++i) {
+       device = devices[i];
+ 
+-      if (!(device->available_nodes & (1 << node_type)))
++      /* A KMS-only device has no render node, kmsro still works on it */
++      unsigned node = node_type;
++      if (!swrast && !(device->available_nodes & (1 << node)))
++         node = DRM_NODE_PRIMARY;
++
++      if (!(device->available_nodes & (1 << node)))
+          continue;
+ 
+-      dri2_dpy->fd = loader_open_device(device->nodes[node_type]);
++      dri2_dpy->fd = loader_open_device(device->nodes[node]);
+       if (dri2_dpy->fd < 0)
+          continue;
+ 
 diff -ru a/src/gallium/drivers/panfrost/pan_cmdstream.c b/src/gallium/drivers/panfrost/pan_cmdstream.c
 --- a/src/gallium/drivers/panfrost/pan_cmdstream.c	2022-12-10 01:57:43.000000000 +0100
 +++ b/src/gallium/drivers/panfrost/pan_cmdstream.c	2026-11-01 02:11:43.838898053 +0100
@@ -12,6 +33,22 @@ diff -ru a/src/gallium/drivers/panfrost/pan_cmdstream.c b/src/gallium/drivers/pa
          } else {
                  vertex = pan_pool_alloc_desc_cs_v10(&batch->pool.base, COMPUTE_JOB);
                  tiler = pan_pool_alloc_desc_cs_v10(&batch->pool.base, TILER_JOB);
+diff -ru a/src/gallium/drivers/panfrost/pan_context.c b/src/gallium/drivers/panfrost/pan_context.c
+--- a/src/gallium/drivers/panfrost/pan_context.c	2022-12-10 01:57:43.000000000 +0100
++++ b/src/gallium/drivers/panfrost/pan_context.c	2026-11-01 03:09:55.849294167 +0100
+@@ -112,6 +112,12 @@
+         /* Submit all pending jobs */
+         panfrost_flush_all_batches(ctx, NULL);
+ 
++        /* JM kbase without CONFIG_MALI_DMA_FENCE puts no fence on a dma-buf,
++         * so KMS can not wait for the GPU. Finish the frame before the buffer
++         * goes to the display. This also limits the queue to one frame. */
++        if (dev->kbase && dev->arch < 10 && (flags & PIPE_FLUSH_END_OF_FRAME))
++                dev->mali.syncobj_wait(&dev->mali, ctx->syncobj_kbase);
++
+         if (fence) {
+                 struct pipe_fence_handle *f = panfrost_fence_create(ctx);
+                 pipe->screen->fence_reference(pipe->screen, fence, NULL);
 diff -ru a/src/panfrost/base/pan_vX_base.c b/src/panfrost/base/pan_vX_base.c
 --- a/src/panfrost/base/pan_vX_base.c	2022-12-10 01:57:43.000000000 +0100
 +++ b/src/panfrost/base/pan_vX_base.c	2026-11-01 02:52:52.435218170 +0100

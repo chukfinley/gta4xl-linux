@@ -9,6 +9,7 @@ apt-get install -y -qq --no-install-recommends meson ninja-build python3-mako py
   libxxf86vm-dev libxrandr-dev pkg-config cmake gcc g++ >/dev/null 2>&1
 rm -rf /opt/src/panfork; mkdir -p /opt/src/panfork && tar xzf /root/panfork.tgz -C /opt/src/panfork
 cd /opt/src/panfork
+patch -p1 < /root/panfork-jm.patch
 meson setup build --prefix=/opt/panfork --libdir=lib --buildtype=release \
   -Dgallium-drivers=panfrost,kmsro,swrast -Dvulkan-drivers= -Dplatforms=wayland,x11 \
   -Dglx=dri -Degl=enabled -Dgbm=enabled -Dgles1=disabled -Dgles2=enabled -Dglvnd=true \

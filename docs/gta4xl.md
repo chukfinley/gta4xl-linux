@@ -124,8 +124,8 @@ The LineageOS recovery entry "Reboot to bootloader" is a fastbootd that accepts 
 
 ## GPU (Mali-G72 r0p1, kbase r38p1) with Panfork
 
-Build on the tablet: `tools/tablet/build-panfork.sh`, install to `/opt/panfork`, patch
-`gpu/panfork-jm.patch`. Test: `LD_LIBRARY_PATH=/opt/panfork/lib LIBGL_DRIVERS_PATH=/opt/panfork/lib/dri
+Build on the tablet: `tools/tablet/build-panfork.sh` (copy `gpu/panfork-jm.patch` to `/root` first),
+install to `/opt/panfork`. Test: `LD_LIBRARY_PATH=/opt/panfork/lib LIBGL_DRIVERS_PATH=/opt/panfork/lib/dri
 GBM_BACKENDS_PATH=/opt/panfork/lib/gbm __EGL_VENDOR_LIBRARY_DIRS=/opt/panfork/share/glvnd/egl_vendor.d
 MESA_LOADER_DRIVER_OVERRIDE=exynos glmark2-es2-drm --off-screen -b build`. Panfork opens /dev/mali0
 through kmsro when the driver name is exynos.
@@ -141,13 +141,38 @@ Fixed for JM on v6:
 - Atom numbers. `pre_dep.atom_id == 0` means no dependency, so the driver must not use atom 0.
   Without this a fragment job after atom 0 started before its tiler job and read an unmapped heap.
   `kbase_throttle_atoms()` keeps 56 atom numbers free, `use_count` is 8 bits.
+- Dependencies through the display. `CONFIG_MALI_DMA_FENCE` is off, so a dma-buf has no fence and
+  a page flip cannot wait for the GPU. `panfrost_flush()` now waits at the end of each frame.
+- EGL surfaceless uses the primary node when the device has no render node. Mutter headless needs
+  this, the DRM shim has no render node.
 The tiler heap stays growable (`BASE_MEM_GROW_ON_GPF`, 128 MB of VA). Grow on fault works on this
-kernel.
+kernel. An earlier note in this file said the opposite. The draw hang was the cause of that note.
 
-State: renderer is "Mali-G72 (Panfrost)". glmark2-es2-drm --off-screen, 1200x2000: build 505 FPS,
-shading 431 FPS, texture 500 FPS, 0 GPU faults, all scenes run.
-glmark2 `--validate` forces 800x600 on X11 only. On DRM the surface stays 1200x2000, so the shading
-and texture references do not match. That is not a render fault.
+State: renderer is "Mali-G72 (Panfrost)". glmark2-es2-drm --off-screen, 1200x2000, 0 GPU faults:
+build 544 FPS, shading 488, texture 448, desktop 86, refract 48, terrain 22. All scenes run.
+`gpu/gbmtest.c` renders to a GBM scanout surface and reads the dma-buf with the CPU: this path works.
+
+glmark2 `--validate` forces 800x600 on X11. On DRM the surface stays 1200x2000, so the shading and
+texture references fail there. That is not a render fault. A better check: a headless gnome-shell
+overview on Panfork against llvmpipe, 99.97 % of the pixels differ by at most 8, the rest is the
+clock and the panel icons.
+
+## GNOME Shell on Panfork
+
+`tools/tablet/panfork-session.sh enable` (as root) writes a drop-in for
+`org.gnome.Shell@wayland.service` with the five Panfork variables. It also adds the extension
+`panfork-env@gta4xl`. This extension removes the variables from the shell after start, so apps
+stay on system Mesa. Mesa 23 of Panfork does not fit the system libraries, so do not use
+`/etc/environment` or `ld.so.conf`. The setting is active after the next login. `disable` undoes
+it, `status` shows the state. Keep SSH open for the first login: if the shell fails, run `disable`
+and then `systemctl restart gdm`.
+
+Test without a change to the session (a separate instance on a private D-Bus):
+`env -i HOME=... XDG_RUNTIME_DIR=... <Panfork variables> dbus-run-session -- gnome-shell --headless
+--virtual-monitor 1200x2000 --wayland --no-x11 --wayland-display wl-gpu`, as user `user`.
+This instance runs on /dev/mali0 with 0 GPU faults. A system Mesa Wayland client on it uses llvmpipe
+and works (57 FPS). A Panfork Wayland client fails with `wl_drm: authenticate failed` on headless,
+because headless mutter is not DRM master. Real KMS page flips are not tested yet.
 
 Debug notes:
 - Exception status in a job header: bits 7:0 type, 9:8 access, 31:16 source. 0x10258 is 0x58
