@@ -81,8 +81,7 @@ The LineageOS recovery entry "Reboot to bootloader" is a fastbootd that accepts 
 - Power key: logind ignores it, GNOME has power-button-action `nothing`, and
   `gta4xl-powerkey` sets mutter PowerSaveMode. The greeter has a private session bus, so the
   address comes from the gnome-shell environment.
-- Suspend: "PM: suspend entry" is the last log line, the tablet then restarts. All sleep targets
-  are masked.
+- Suspend: see "System sleep".
 - WLAN: the driver reads `/vendor/etc/wifi/slsi_reg_database.bin` and needs that exact path.
   NetworkManager must turn power save off, otherwise SSH sessions stop.
 - Bluetooth: there is no rfkill start in old configs. `gta4xl-bluetooth.service` writes 1 to
@@ -186,10 +185,75 @@ Debug notes:
 ## Browser and GPU
 
 GNOME Shell and Wayland clients with EGL run on Mali through `tools/tablet/panfork-system.sh`.
-Chromium (Brave, Electron): its Wayland GPU process needs a GBM device on a DRM render node.
-decon-kms has no render node, so shared images fail and the GPU process restarts in a loop
-("Cannot create bo with format=RGBA_8888"). Brave under Xwayland with ANGLE probably reset the
-tablet (no panic text). Brave and T3 Code use `--disable-gpu` until that works.
+Brave and Electron (T3 Code, Mattermost) run on the GPU with these flags, see `tools/tablet/tune.sh`:
+`--ozone-platform=wayland --ignore-gpu-blocklist --disable-gpu-sandbox --use-gl=angle --use-angle=gles
+--disable-features=Vulkan`. The GPU sandbox has no rule for /dev/mali0. `--disable-gpu` is gone.
+
+Chromium needed four changes:
+- `DRIVER_RENDER` in `decon_kms.c`. `/dev/dri/renderD128` now exists. The dumb ioctls of this kernel
+  already have `DRM_RENDER_ALLOW`. Mutter works with the new node.
+- The GPU process opens `card0`, not the render node. `DRM_IOCTL_PRIME_HANDLE_TO_FD` needs
+  `DRM_AUTH` on a primary node, so GBM failed with EACCES ("failed to export dumb buffer"). The
+  flag is gone from the two PRIME ioctls in `drm_ioctl.c`. Upstream removed it too.
+- `PIPE_CAP_NATIVE_FENCE_FD` is 0 on kbase. kbase cannot export a sync file,
+  eglDupNativeFenceFDANDROID failed and the GPU process stopped with exit code 5.
+- Panfork found the same dma-buf with kcmp, but this kernel has no `CONFIG_CHECKPOINT_RESTORE`.
+  Each import made a new BO and printed "error in os_same_file_description". It now compares
+  the inode, each dma-buf has its own inode.
+
+Results on 2026-11-01, Brave 1.98 (Chromium 156), 2000x947, ANGLE on "Mali-G72 (Panfrost)", OpenGL ES
+3.1, `gpu_compositing` enabled: example.com and Wikipedia at 60 FPS, correct colours. WebGL 2 full
+screen shader 1200x800 at 62 FPS. 20 s test clips, software decode: VP9 720p30 0 dropped frames,
+VP9 1080p30 1 dropped, H.264 1080p30 0 dropped. 5 min soak with video, canvas, 30 CSS animations and
+DOM churn: 0 GPU faults, GPU process alive, 75 C. T3 Code (Electron 44) and Mattermost start and load
+exynos_dri. The GPU process exit 8704 and the restart loop are gone.
+
+Test notes:
+- `vkCreateInstance() failed: -9` and `vaInitialize failed` in the log are harmless.
+- Do not use Xwayland with ANGLE, that test probably reset the tablet. Mattermost has `autostart`
+  on by default and its autostart entry has no flags. `tune.sh` turns it off.
+- `systemctl stop` on a test unit can leave the Brave main process alive, it then starts a new GPU
+  process with `--gpu-recent-crash-count=1`. That is no crash.
+- Do not use `pkill -f` with a text that is also in your own SSH command line.
+- Tests over CDP: `ssh -L 9222:127.0.0.1:9222`, `--remote-debugging-port=9222`, `SystemInfo.getInfo`,
+  `Page.captureScreenshot`, `getVideoPlaybackQuality()`.
+
+## System sleep
+
+Deep sleep works, PSCI and resume on this kernel are fine. Three problems hid that.
+
+- Multistage watchdog. `kernel/power/process.c` (Samsung code) stops `10060000.watchdog_cl1` before
+  each freeze and starts it after. Android runs this watchdog, Linux does not. So the freezer started
+  a watchdog with count 0 that nobody serves. About 16 s later CPU0 stayed in c2, all interrupts go
+  to CPU0, then came I2C, UFS and Mali timeouts and a hard lockup panic ("IDLE STUCK"). Even
+  `pm_test=freezer` reset the tablet. `s3c2410_wdt.c` now starts it only if it was on before.
+- Touch. `himax_tp` was a wake interrupt and ran while the SPI controller slept: "failed to prepare
+  transfer hardware: -13" and the abort of sleep with `pm_wakeup_irq` 270. The driver now has system
+  sleep ops that stop the interrupt, and the wake flag is gone.
+- WLAN. `INT_MBOX_WLBT2AP` ends sleep at once for each scan result and broadcast frame.
+  `SETSUSPENDMODE 1` does not stop the MLME frames. The hook
+  `/usr/lib/systemd/system-sleep/gta4xl` turns the radio off before sleep and on after sleep.
+  WLAN is connected again 25 s after resume or earlier. There is no wake on WLAN.
+
+`gta4xl-powerkey` starts `systemctl suspend` when the panel was off for 120 s, on battery only, with
+no `[active]` entry in `wpctl status` and no block inhibitor for sleep. A tablet on the charger stays
+awake, so SSH and background jobs continue there. The hook sends SIGUSR1 after resume and the daemon
+switches the panel on. Key presses in the next 3 s are ignored, because the press that woke the
+tablet arrives as an input event. `sleep.target` and `suspend.target` are unmasked, the hibernate
+targets stay masked.
+
+Wake sources: Power (`gpio-key,wakeup` in the DT, `gpio_keys` simulates the press), PMIC RTC. Check
+after a sleep: `dmesg | grep "Resume caused"`, `/sys/power/suspend_stats`.
+
+Debug:
+- `/proc/last_kmsg` holds the kernel log of the last boot, also after a panic. It contains NUL
+  bytes: `tr -d '\000' < /proc/last_kmsg | grep -a '^<[0-9]>\['`.
+- Test levels: `echo LEVEL > /sys/power/pm_test; echo mem > /sys/power/state`. Wait 40 s after each
+  test, the lockup came 16 s after the test ended.
+- "Abort: Disabling non-boot cpus failed" at level `processors` is only the label of the test.
+- `cat /sys/power/wakeup_count` blocks while a wakeup source is active.
+- There is no debugfs on this kernel, so no `wakeup_sources` file.
+- Test without hands: `echo +30 > /sys/class/rtc/rtc0/wakealarm; systemctl suspend`.
 
 ## Audio
 

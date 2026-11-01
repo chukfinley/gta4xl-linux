@@ -1,5 +1,5 @@
 [Unit]
-Description=Power key toggles the panel
+Description=Power key toggles the panel, deep sleep with the panel off
 
 [Service]
 ExecStart=/usr/bin/python3 /usr/local/sbin/gta4xl-powerkey

@@ -185,10 +185,30 @@ index 971cb1cb5..ad9fd77f5 100644
  #elif defined(CONFIG_FB)
  	extern int fb_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
 diff --git a/drivers/input/touchscreen/himax/himax_83102E/himax_platform_SPI.c b/drivers/input/touchscreen/himax/himax_83102E/himax_platform_SPI.c
-index 136b274d8..d3efaf1e2 100644
+index 136b274d8..0ddac7b7d 100644
 --- a/drivers/input/touchscreen/himax/himax_83102E/himax_platform_SPI.c
 +++ b/drivers/input/touchscreen/himax/himax_83102E/himax_platform_SPI.c
-@@ -847,7 +847,7 @@ static int himax_common_suspend(struct device *dev)
+@@ -792,9 +792,6 @@ int himax_ts_register_interrupt(void)
+ 			ts->irq_enabled = 1;
+ 			atomic_set(&ts->irq_state, 1);
+ 			I("%s: irq enabled at gpio: %d\n", __func__, private_ts->hx_irq);
+-#ifdef HX_SMART_WAKEUP
+-			irq_set_irq_wake(private_ts->hx_irq, 1);
+-#endif
+ 		} else {
+ 			ts->use_irq = 0;
+ 			E("%s: request_irq failed\n", __func__);
+@@ -824,9 +821,6 @@ int himax_ts_unregister_interrupt(void)
+ 
+ 	/* Work functon */
+ 	if (private_ts->hx_irq && ts->use_irq) {/*INT mode*/
+-#ifdef HX_SMART_WAKEUP
+-		irq_set_irq_wake(ts->hx_irq, 0);
+-#endif
+ 		free_irq(ts->hx_irq, ts);
+ 		I("%s: irq disabled at qpio: %d\n", __func__, private_ts->hx_irq);
+ 	}
+@@ -847,7 +841,7 @@ static int himax_common_suspend(struct device *dev)
  	struct himax_ts_data *ts = dev_get_drvdata(dev);
  
  	I("%s: enter\n", __func__);
@@ -197,7 +217,7 @@ index 136b274d8..d3efaf1e2 100644
  	if (!ts->initialized)
  		return -ECANCELED;
  #endif
-@@ -860,7 +860,7 @@ static int himax_common_resume(struct device *dev)
+@@ -860,7 +854,7 @@ static int himax_common_resume(struct device *dev)
  	struct himax_ts_data *ts = dev_get_drvdata(dev);
  
  	I("%s: enter\n", __func__);
@@ -206,7 +226,7 @@ index 136b274d8..d3efaf1e2 100644
  	/*
  	 *	wait until device resume for TDDI
  	 *	TDDI: Touch and display Driver IC
-@@ -875,7 +875,7 @@ static int himax_common_resume(struct device *dev)
+@@ -875,7 +869,7 @@ static int himax_common_resume(struct device *dev)
  }
  #endif
  
@@ -215,15 +235,52 @@ index 136b274d8..d3efaf1e2 100644
  int drm_notifier_callback(struct notifier_block *self,
  		unsigned long event, void *data)
  {
-@@ -1151,7 +1151,7 @@ int himax_chip_common_remove(struct spi_device *spi)
+@@ -1150,10 +1144,36 @@ int himax_chip_common_remove(struct spi_device *spi)
+ 	return 0;
  }
  
++/*
++ * The panel stays on in system sleep, so the fb notifier does not stop the IC. Its interrupt must
++ * not run while the SPI controller sleeps ("failed to prepare transfer hardware"), and a touch
++ * must not end system sleep.
++ */
++static int himax_sleep_suspend(struct device *dev)
++{
++	struct himax_ts_data *ts = dev_get_drvdata(dev);
++
++	if (ts && ts->hx_irq)
++		disable_irq(ts->hx_irq);
++	return 0;
++}
++
++static int himax_sleep_resume(struct device *dev)
++{
++	struct himax_ts_data *ts = dev_get_drvdata(dev);
++
++	if (ts && ts->hx_irq)
++		enable_irq(ts->hx_irq);
++	return 0;
++}
++
  static const struct dev_pm_ops himax_common_pm_ops = {
 -#if (!defined(CONFIG_FB)) && (!defined(CONFIG_DRM))
 +#if (!defined(CONFIG_FB)) && (!defined(CONFIG_DRM_MSM))
  	.suspend = himax_common_suspend,
  	.resume  = himax_common_resume,
++#else
++	.suspend = himax_sleep_suspend,
++	.resume  = himax_sleep_resume,
  #endif
+ };
+ 
+@@ -1171,6 +1191,7 @@ static struct spi_driver himax_common_driver = {
+ 		.name =		HIMAX_common_NAME,
+ 		.owner =	THIS_MODULE,
+ 		.of_match_table = himax_match_table,
++		.pm =		&himax_common_pm_ops,
+ 	},
+ 	.probe =	himax_chip_common_probe,
+ 	.remove =	himax_chip_common_remove,
 diff --git a/drivers/input/touchscreen/himax/himax_83102E/himax_platform_SPI.h b/drivers/input/touchscreen/himax/himax_83102E/himax_platform_SPI.h
 index badb6493b..6190672c2 100644
 --- a/drivers/input/touchscreen/himax/himax_83102E/himax_platform_SPI.h
@@ -1134,6 +1191,42 @@ index 000000000..3672d68ae
 +	return ret;
 +}
 +late_initcall(decon_kms_init);
+diff --git a/drivers/watchdog/s3c2410_wdt.c b/drivers/watchdog/s3c2410_wdt.c
+index ae12d7313..9c832f39c 100644
+--- a/drivers/watchdog/s3c2410_wdt.c
++++ b/drivers/watchdog/s3c2410_wdt.c
+@@ -841,6 +841,9 @@ int s3c2410wdt_keepalive_emergency(bool reset, int index)
+ 	return 0;
+ }
+ 
++/* Android starts this watchdog, a Linux userland does not: see the start function */
++static bool multistage_wdt_was_on;
++
+ int s3c2410wdt_emergency_multistage_wdt_stop(void)
+ {
+ 	int index;
+@@ -853,6 +856,7 @@ int s3c2410wdt_emergency_multistage_wdt_stop(void)
+ 
+ 	spin_lock_irqsave(&s3c_wdt[index]->lock, flags);
+ 	wtcon = readl(s3c_wdt[index]->reg_base + S3C2410_WTCON);
++	multistage_wdt_was_on = wtcon & S3C2410_WTCON_ENABLE;
+ 	wtcon &= ~(S3C2410_WTCON_ENABLE | S3C2410_WTCON_INTEN);
+ 	writel(wtcon, s3c_wdt[index]->reg_base + S3C2410_WTCON);
+ 	spin_unlock_irqrestore(&s3c_wdt[index]->lock, flags);
+@@ -869,6 +873,13 @@ int s3c2410wdt_emergency_multistage_wdt_start(void)
+ 	if (index < 0)
+ 		return -ENODEV;
+ 
++	/*
++	 * The freezer calls this after each freeze. A watchdog that nobody started has count 0,
++	 * and its interrupt holds CPU0 in firmware 16 s later: hard lockup "IDLE STUCK".
++	 */
++	if (!multistage_wdt_was_on)
++		return 0;
++
+ 	spin_lock_irqsave(&s3c_wdt[index]->lock, flags);
+ 	s3c2410wdt_multistage_wdt_stop();
+ 
 diff --git a/include/uapi/linux/wait.h b/include/uapi/linux/wait.h
 index ac49a220c..85b809fc9 100644
 --- a/include/uapi/linux/wait.h

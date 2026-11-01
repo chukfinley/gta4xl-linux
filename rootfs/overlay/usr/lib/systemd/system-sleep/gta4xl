@@ -1,0 +1,22 @@
+#!/bin/sh
+# The WLAN firmware ends system sleep at once for each scan result and broadcast frame, so the
+# radio stays off during sleep. NetworkManager connects again after resume.
+FLAG=/run/gta4xl-wifi-was-on
+case "$1" in
+pre)
+    if [ "$(nmcli -t radio wifi)" = enabled ]; then
+        touch "$FLAG"
+        nmcli radio wifi off
+        sleep 1
+    fi
+    ;;
+post)
+    if [ -e "$FLAG" ]; then
+        rm -f "$FLAG"
+        nmcli radio wifi on &
+    fi
+    # The system is awake: gta4xl-powerkey switches the panel on
+    systemctl kill -s USR1 --kill-who=main gta4xl-powerkey.service
+    ;;
+esac
+exit 0

@@ -16,7 +16,7 @@ are not tested. You do this at your own risk.
 | On-screen keyboard | works |
 | Bottom edge swipe, touch resize handle, maximized windows | works, gnome-shell extension |
 | Night Light | works, shader in the extension (no gamma LUT) |
-| Power key | panel off and on, touch locked while off |
+| Power key | panel off and on, touch locked while off, deep sleep after 2 min |
 | Battery | percent and time estimate through UPower |
 | SD card | works, ext4 on /media/sd |
 | Tailscale, Brave, T3 Code, Claude and Codex CLI | work |
@@ -26,8 +26,8 @@ are not tested. You do this at your own risk.
 | Pen | detected by libinput, test open |
 | Audio | Bluetooth A2DP works. Speaker sink in PipeWire with GNOME volume, jack route. Confirmation by ear open. No microphone |
 | Video | mpv and Celluloid, 1080p30 H.264 on Panfork with no dropped frames, large touch controls in mpv |
-| GPU (Mali-G72) | Panfork clears at 600 FPS, draws still hang. GNOME runs on software rendering |
-| Suspend | does not resume, disabled |
+| GPU (Mali-G72) | Panfork: GNOME Shell, Wayland clients, mpv, Brave, T3 Code and Mattermost on the GPU |
+| Suspend | deep sleep works, automatic with the panel off on battery. Power key wake: test open |
 | Hardware video decode | not with ffmpeg, the MFC driver has no MMAP buffers and no V4L2 events. Software decode handles 1080p |
 | USB network | does not work, disabled. USB serial console works |
 

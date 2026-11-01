@@ -14,6 +14,8 @@ systemctl start systemd-zram-setup@zram0.service
 for s in rsyslog e2scrub_reap avahi-daemon avahi-daemon.socket cups cups-browsed ModemManager; do
   systemctl disable --now "$s" 2>/dev/null
 done
+# Deep sleep works, gta4xl-firstsetup of older images masked it
+systemctl unmask sleep.target suspend.target
 # File indexing and desktop helpers that a tablet does not need, about 150 MB
 systemctl --global mask tracker-miner-fs-3.service tracker-extract-3.service tracker-miner-rss-3.service \
   org.gnome.SettingsDaemon.Sharing.service org.gnome.SettingsDaemon.Smartcard.service \
