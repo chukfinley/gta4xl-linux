@@ -1,0 +1,27 @@
+#!/usr/bin/env python3
+"""Send Android private commands to the SCSC WLAN driver: gta4xl-wlan-cmd IFACE CMD [CMD ...]."""
+import ctypes
+import fcntl
+import socket
+import struct
+import sys
+
+SIOCDEVPRIVATE_2 = 0x89f2
+SIZE = 256
+
+
+def send(iface, text):
+    buf = ctypes.create_string_buffer(text.encode(), SIZE)
+    # struct android_wifi_priv_cmd { char *buf; int used_len; int total_len; }
+    cmd = ctypes.create_string_buffer(struct.pack("QII", ctypes.addressof(buf), 0, SIZE))
+    ifr = struct.pack("16sQ8x", iface.encode(), ctypes.addressof(cmd))
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        fcntl.ioctl(s, SIOCDEVPRIVATE_2, ifr)
+    return buf.value.decode(errors="replace")
+
+
+for command in sys.argv[2:]:
+    try:
+        print(command, "->", send(sys.argv[1], command))
+    except OSError as err:
+        print(command, "failed:", err)

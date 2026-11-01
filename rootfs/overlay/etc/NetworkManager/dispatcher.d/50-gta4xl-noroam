@@ -1,0 +1,6 @@
+#!/bin/sh
+# The firmware scans for a better AP every 25 s on one strong AP, and the AP then drops the tablet
+# with deauth reason 7. Only roam on a very weak signal.
+[ "$1" = wlan0 ] && [ "$2" = up ] || exit 0
+/usr/bin/python3 /usr/local/sbin/gta4xl-wlan-cmd wlan0 "SETNCHOMODE 1" "SETROAMTRIGGER -90" "SETROAMSCANPERIOD 60" >/dev/null 2>&1
+exit 0
