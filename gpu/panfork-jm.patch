@@ -1,6 +1,20 @@
-diff -ru src/panfrost/base/pan_vX_base.c /opt/src/panfork/src/panfrost/base/pan_vX_base.c
+diff -ru a/src/gallium/drivers/panfrost/pan_cmdstream.c b/src/gallium/drivers/panfrost/pan_cmdstream.c
+--- a/src/gallium/drivers/panfrost/pan_cmdstream.c	2022-12-10 01:57:43.000000000 +0100
++++ b/src/gallium/drivers/panfrost/pan_cmdstream.c	2026-11-01 02:11:43.838898053 +0100
+@@ -4208,8 +4208,9 @@
+         if (idvs) {
+ #if PAN_ARCH >= 6
+                 tiler = pan_pool_alloc_desc(&batch->pool.base, INDEXED_VERTEX_JOB);
+-#endif
++#else
+                 unreachable("IDVS is unsupported on Midgard");
++#endif
+         } else {
+                 vertex = pan_pool_alloc_desc_cs_v10(&batch->pool.base, COMPUTE_JOB);
+                 tiler = pan_pool_alloc_desc_cs_v10(&batch->pool.base, TILER_JOB);
+diff -ru a/src/panfrost/base/pan_vX_base.c b/src/panfrost/base/pan_vX_base.c
 --- a/src/panfrost/base/pan_vX_base.c	2022-12-10 01:57:43.000000000 +0100
-+++ a/src/panfrost/base/pan_vX_base.c	2026-11-01 02:21:47.173194996 +0100
++++ b/src/panfrost/base/pan_vX_base.c	2026-11-01 02:21:47.173194996 +0100
 @@ -607,10 +607,10 @@
          if (pan_flags & PANFROST_BO_HEAP) {
                  size_t align_size = 2 * 1024 * 1024 / k->page_size; /* 2 MB */
@@ -34,11 +48,9 @@ diff -ru src/panfrost/base/pan_vX_base.c /opt/src/panfork/src/panfrost/base/pan_
          };
  
          for (unsigned i = 0; i < KBASE_SLOT_COUNT; ++i)
-Nur in /opt/src/panfork/src/panfrost/bifrost: __pycache__.
-Nur in /opt/src/panfork/src/panfrost/bifrost/valhall: __pycache__.
-diff -ru src/panfrost/lib/genxml/decode.c /opt/src/panfork/src/panfrost/lib/genxml/decode.c
+diff -ru a/src/panfrost/lib/genxml/decode.c b/src/panfrost/lib/genxml/decode.c
 --- a/src/panfrost/lib/genxml/decode.c	2022-12-10 01:57:43.000000000 +0100
-+++ a/src/panfrost/lib/genxml/decode.c	2026-11-01 02:19:56.992215576 +0100
++++ b/src/panfrost/lib/genxml/decode.c	2026-11-01 02:19:56.992215576 +0100
 @@ -1257,7 +1257,14 @@
  
                  /* Ensure the job is marked COMPLETE */
@@ -55,9 +67,9 @@ diff -ru src/panfrost/lib/genxml/decode.c /opt/src/panfork/src/panfrost/lib/genx
                          fflush(NULL);
                          abort();
                  }
-diff -ru src/panfrost/lib/pan_cs.c /opt/src/panfork/src/panfrost/lib/pan_cs.c
+diff -ru a/src/panfrost/lib/pan_cs.c b/src/panfrost/lib/pan_cs.c
 --- a/src/panfrost/lib/pan_cs.c	2022-12-10 01:57:43.000000000 +0100
-+++ a/src/panfrost/lib/pan_cs.c	2026-11-01 02:15:06.342648569 +0100
++++ b/src/panfrost/lib/pan_cs.c	2026-11-01 02:29:18.954258613 +0100
 @@ -958,7 +958,7 @@
          pan_pack(out, TILER_HEAP, heap) {
                  heap.size = dev->tiler_heap->size;
@@ -67,9 +79,20 @@ diff -ru src/panfrost/lib/pan_cs.c /opt/src/panfork/src/panfrost/lib/pan_cs.c
                  heap.top = dev->tiler_heap->ptr.gpu + dev->tiler_heap->size;
          }
  }
-diff -ru src/panfrost/lib/pan_props.c /opt/src/panfork/src/panfrost/lib/pan_props.c
+@@ -1000,8 +1000,10 @@
+ #if PAN_ARCH >= 9
+                 tiler.first_provoking_vertex = first_provoking_vertex;
+ #endif
++#if PAN_ARCH >= 10
+                 tiler.state.word1 = 31;
+                 tiler.state.word3 = 0x10000000;
++#endif
+         }
+ }
+ #endif
+diff -ru a/src/panfrost/lib/pan_props.c b/src/panfrost/lib/pan_props.c
 --- a/src/panfrost/lib/pan_props.c	2022-12-10 01:57:43.000000000 +0100
-+++ a/src/panfrost/lib/pan_props.c	2026-11-01 02:21:47.177194886 +0100
++++ b/src/panfrost/lib/pan_props.c	2026-11-01 02:21:47.177194886 +0100
 @@ -359,7 +359,7 @@
           * shared across batches/contextes */
  
@@ -79,17 +102,3 @@ diff -ru src/panfrost/lib/pan_props.c /opt/src/panfork/src/panfrost/lib/pan_prop
                                               PAN_BO_INVISIBLE | PAN_BO_GROWABLE, "Tiler heap");
  
          pthread_mutex_init(&dev->submit_lock, NULL);
-diff -ru src/gallium/drivers/panfrost/pan_cmdstream.c /opt/src/panfork/src/gallium/drivers/panfrost/pan_cmdstream.c
---- a/src/gallium/drivers/panfrost/pan_cmdstream.c	2022-12-10 01:57:43.000000000 +0100
-+++ a/src/gallium/drivers/panfrost/pan_cmdstream.c	2026-11-01 02:11:43.838898053 +0100
-@@ -4208,8 +4208,9 @@
-         if (idvs) {
- #if PAN_ARCH >= 6
-                 tiler = pan_pool_alloc_desc(&batch->pool.base, INDEXED_VERTEX_JOB);
--#endif
-+#else
-                 unreachable("IDVS is unsupported on Midgard");
-+#endif
-         } else {
-                 vertex = pan_pool_alloc_desc_cs_v10(&batch->pool.base, COMPUTE_JOB);
-                 tiler = pan_pool_alloc_desc_cs_v10(&batch->pool.base, TILER_JOB);
