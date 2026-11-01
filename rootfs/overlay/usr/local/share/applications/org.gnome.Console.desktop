@@ -1,0 +1,5 @@
+[Desktop Entry]
+Type=Application
+Name=Console
+Exec=true
+NoDisplay=true

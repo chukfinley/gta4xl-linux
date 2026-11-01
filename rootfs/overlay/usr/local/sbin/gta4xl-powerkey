@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Short press on Power switches the panel off and on through mutter, and deep sleep follows.
+A press of LOCK_HOLD seconds or more locks the session. Nothing else locks it after the boot.
 
 logind ignores the key and gsd-power has no such action. Works on the greeter too: the greeter
 runs on a private session bus, so the bus address comes from the gnome-shell environment.
@@ -25,6 +26,7 @@ PATH = ["org.gnome.Mutter.DisplayConfig", "/org/gnome/Mutter/DisplayConfig",
         "org.gnome.Mutter.DisplayConfig", "PowerSaveMode"]
 BATTERY = "/sys/class/power_supply/battery/status"
 SLEEP_AFTER = 120
+LOCK_HOLD = 1.0
 TICK = 20
 # The key press that ended sleep arrives after the resume signal, it must not switch the panel off
 RESUME_GUARD = 3
@@ -72,8 +74,6 @@ def set_panel(target, touch, on):
         fcntl.ioctl(touch, EVIOCGRAB, 0 if on else 1)
     except OSError:
         pass  # It already has this state: the panel also goes off through GNOME
-    if not on:
-        subprocess.run(["loginctl", "lock-sessions"])
 
 
 def audio_active():
@@ -104,6 +104,7 @@ def main():
     off_since = None
     resumed = 0.0
     was_on = None
+    pressed = 0.0
     while True:
         ready = select.select([key, wake_r], [], [], TICK)[0]
 
@@ -123,7 +124,12 @@ def main():
                     continue
                 if value == 1:
                     was_on = panel_on()
+                    pressed = time.monotonic()
                 elif value == 0 and was_on is not None:
+                    if time.monotonic() - pressed >= LOCK_HOLD:
+                        subprocess.run(["loginctl", "lock-sessions"])
+                        was_on = None
+                        continue
                     # On release: mutter also wakes on the release, after the panel went off
                     time.sleep(0.1)
                     target = shell()
@@ -140,7 +146,6 @@ def main():
             # Try again one period later if a condition does not hold or sleep fails
             off_since = None
             if on_battery() and not audio_active() and not sleep_blocked():
-                subprocess.run(["loginctl", "lock-sessions"])
                 subprocess.run(["systemctl", "suspend"])
 
 

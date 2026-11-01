@@ -458,8 +458,7 @@ events arrive in batches of about 1 s, so timing tests belong on the hardware.
 
 New extension code needs a new session. Use `systemctl restart gdm`, this logs in again.
 
-On-screen keyboard: GJS OSK, `tools/tablet/osk-setup.sh`, settings in
-`/etc/dconf/db/local.d/51-gta4xl-osk`.
+On-screen keyboard: the GNOME Shell keyboard with a tool row, from Tablet Shell.
 - The zip has private file modes and no compiled schema, both stop the extension.
 - It has no rule for a physical keyboard. Its setting "never" still opens it for a touch on a shell
   text field. So `gta4xl-tablet` turns the extension off while an external keyboard is connected.
@@ -477,91 +476,26 @@ stays after a new login, and the PIN pad and all gestures are gone. The unit is 
 Known crash: mutter 46.2 ends with SIGSEGV when a Wayland client dies with an open menu. It occurs
 with a normal mouse and with both extensions off. Close the menu first. See bead android-linux-8iv.
 
-## Dock
+## Desktop
 
-Dash to Dock 110 with `tools/tablet/dash-to-dock.patch`, settings in
-`/etc/dconf/db/local.d/52-gta4xl-dock`, window actions in `dock.js` of `gta4xl-tablet`. Install:
-`tools/tablet/dock-setup.sh`, as root on the tablet, with the patch next to it, then a new login. The
-first run sets `enabled-extensions` and `favorite-apps` for `user`, because dconf defaults reach only
-keys that the user has not set. A later run keeps the pinned apps.
+All general UI is the project Tablet Shell (`tablet-shell@gnome-tablet`): Home Screen, Dock, gestures,
+window controls, Control Center, Notification Center, lock screen, widgets, on-screen keyboard.
+Install: `tools/tablet/tablet-shell.sh DIR` on the computer, `tools/tablet/slim-session.sh` as root
+on the tablet. `gta4xl-tablet` keeps only the Night Light shader and the lock after boot.
 
-Size: icons 44 px, each button 56 x 66 logical px (84 x 99 panel pixels), dock height 66 px. The
-strut takes these 66 px, so a maximized window stops above the dock: landscape work area 1335 x 706,
-portrait 801 x 1240. The Dash has `height-fraction` 1, it fits 13 buttons in portrait.
+Lock rule: the session locks only after a boot or a session start, and by hand. Short press on Power
+switches the panel, a press of 1 s or more locks. Deep sleep does not lock.
 
-Operation:
-- Tap on a closed app: start. Tap on a running app: focus. Tap on the focused app: minimize, or the
-  window picker if the app has more windows. The picker has a close button on each preview.
-- Long press (600 ms) or right click: pin, unpin, new window, left half, right half, quit.
-- Press 200 ms, then drag an icon to the left or right quarter of the screen: the app fills that
-  half, a closed app starts there. A preview shows the target. GNOME treats a touch that moves
-  before 200 ms as a scroll, so it starts no drag.
-- The button left of the app grid button shows all windows, the same as the bottom swipe.
+Removed for speed: gsd plugins A11ySettings, Datetime, Housekeeping, Keyboard, PrintNotifications,
+ScreensaverProxy, Sharing, Smartcard, Sound, UsbProtection, Wacom, Wwan (masks in
+`etc/systemd/user`, hidden autostarts), tracker, power-profiles-daemon, apt and man-db timers.
 
-What the patch does:
-- `button ||= 1` in `_activate`. St.Button emits `clicked` with button 0 for a touch, and Dash to Dock
-  then took the action "skip": it only focused the window. So minimize and the picker never worked
-  by touch.
-- `session-modes` with `unlock-dialog`, and no rebuild of the docks when the lock state changes.
-  Without this the lock screen disables the extension, the strut goes away and each maximized window
-  redraws two times per lock.
-- The close button of the previews stays visible, a touch has no hover.
-- The button for all windows, and a call to `extendMenu` for the two halves.
+Load average near 17 on an idle desktop: about 15 Samsung TEE kernel threads wait in D state
+(`tz_worker_thread`, `tz_iwsock`, `ree_time`, `scsi_srpmb_work`, `simpleinteractive`). The CPU is 99 %
+idle. A fix needs `TASK_IDLE` in those drivers.
 
-The general long press of `TouchGestures` does not fire on the dock, it works only in a window actor.
-The dock has one long press, from `AppIcon`.
-
-Bottom swipe over the dock: St.Button stops the touch begin, and then Clutter removes all actions from
-the event chain of this touch, also the `EdgeDragAction`. `captured-event` of the stage still gets the
-touch, so `dock.js` has its own copy of the swipe rules. The shell drag code takes a grab on each touch
-begin, and the stage then gets nothing more. So `dock.js` wraps `_grabActor`: a touch that starts in the
-bottom 20 px gets no grab. A tap there still reaches the icon.
-
-A window in full screen hides the dock and its strut. GJS OSK raises itself to the top of `uiGroup`, so
-it covers the dock.
-
-`web-youtube.desktop` has `StartupWMClass=brave-www.youtube.com__-Default`. Without it the window of
-the web app gets a second icon in the dock. The name comes from the `--app` URL and the Brave profile.
-
-If Tablet Shell runs on the tablet, it skips its own Dock when Dash to Dock is in `enabled-extensions`.
-
-`spotify-web.desktop` exists only after `WITH_SPOTIFY=1 tools/tablet/more-apps.sh`. The shell skips a pin
-with no desktop file, so the dock then has one icon less.
-
-Frame time on the tablet, 2026-11-01, stage `after-paint` intervals. Overview: touch up to the last
-frame, swipe at the gap left of the dock, 10 transitions per run, 2 windows. Drag: top bar drag of Text
-Editor, 4 or 6 drags per run. The dock comes off with `disableExtension`. Other agents used the tablet
-during all runs (load 17 to 20), so the tail values are noise. Each pair is from the same period.
-
-| Run | Dock | Frames | p50 | p95 | max | Total |
-|---|---|---|---|---|---|---|
-| Overview | on | 78 | 24.7 ms | 59 ms | 68 ms | 228 ms |
-| Overview | off | 61 | 27.8 ms | 58 ms | 107 ms | 204 ms |
-| Overview | on | 57 | 30.2 ms | 75 ms | 79 ms | 200 ms |
-| Overview | off | 60 | 32.5 ms | 76 ms | 137 ms | 209 ms |
-| Overview | on | 66 | 29.8 ms | 130 ms | 141 ms | 262 ms |
-| Overview | off | 74 | 27.1 ms | 74 ms | 155 ms | 250 ms |
-| Drag | on | 332 | 17.2 ms | 28 ms | 86 ms | |
-| Drag | off | 221 | 17.1 ms | 30 ms | 485 ms | |
-| Drag | on | 415 | 18.1 ms | 168 ms | 336 ms | |
-| Drag | off | 245 | 17.7 ms | 136 ms | 308 ms | |
-
-The dock adds no cost that these runs can show: p50 stays within the spread between runs of one mode.
-The overview shows only 5 to 8 frames in about 200 ms, with and without the dock. The cause is the
-stall of the first frame, a timeline then ends after few frames.
-
-`disableExtension` takes 315 ms and `enableExtension` 405 ms in the shell thread. The lock screen uses
-neither, the extension stays on.
-
-The panel stays off after a new login until a touch or key arrives, and on battery `gta4xl-powerkey`
-then starts deep sleep after 120 s. WLAN is off in sleep, so SSH tests need the charger. Check
-`/sys/class/drm/card0-DSI-1/dpms` before a test: touch injection does nothing while the daemon has the
-grab on the touchscreen.
-
-Test without the tablet: a headless shell on the PC with both extensions, see "Touch and windows".
-Injected touch shows all the points above. In `gdbus call`, `\n` in a JS string becomes a real line
-break, and `Clutter.get_current_event().get_event_sequence()` gives a new object for each call, so
-compare the slot.
+Trap: on battery the panel off state starts deep sleep after 120 s, and then WLAN and SSH go. For
+tests hold `systemd-inhibit --what=sleep --mode=block`.
 
 ## Access and security
 

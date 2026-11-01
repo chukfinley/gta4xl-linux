@@ -13,10 +13,10 @@ are not tested. You do this at your own risk.
 | Boot, systemd, GDM | works |
 | Display (own DRM/KMS driver over DECON) | works, GNOME Wayland |
 | Touch | works |
-| On-screen keyboard | GJS OSK with Esc, Ctrl, Tab and arrows, only with no physical keyboard |
+| On-screen keyboard | GNOME Shell keyboard with Esc, Tab, Ctrl, Alt and arrows, only with no physical keyboard |
 | Edge swipes | bottom overview, top right quick settings, top middle calendar, also in full screen |
 | Window handling | iPadOS grabbers: corner arc with outline resize, top bar with snap to half or full |
-| Dock | Dash to Dock, always visible, for touch and mouse: window picker, close, left and right half, pinned apps |
+| Desktop | Tablet Shell: iPadOS style Home Screen, Dock, gestures, window controls, lock screen, widgets |
 | Right click by touch | long press and two finger tap, in all apps |
 | Night Light | works in Settings, shader in the extension, the kernel ignores the LUT |
 | Power key | panel off and on, touch locked while off, deep sleep after 2 min |
@@ -61,7 +61,7 @@ The firmware comes from your own tablet. Samsung files are not part of this repo
 
 After the first boot, new kernels install from Ubuntu with `tools/deploy-kernel.sh`.
 Run `tools/tablet/tune.sh`, `tools/tablet/install-apps.sh`, `tools/tablet/t3-service.sh` and
-`tools/tablet/media-setup.sh`, `tools/tablet/osk-setup.sh` and `tools/tablet/dock-setup.sh` on the tablet as root. `tools/tablet/build-panfork.sh` builds the GPU driver on the tablet.
+`tools/tablet/media-setup.sh` and `tools/tablet/slim-session.sh` on the tablet as root. Install the desktop with `tools/tablet/tablet-shell.sh DIR` from a Tablet Shell checkout. `tools/tablet/build-panfork.sh` builds the GPU driver on the tablet.
 
 ## Publish
 
@@ -70,4 +70,4 @@ Run `tools/tablet/tune.sh`, `tools/tablet/install-apps.sh`, `tools/tablet/t3-ser
 ## License
 
 The kernel patch is GPL-2.0, as the kernel. The Panfork patch is MIT, as Mesa. The scripts and the
-GNOME extension are MIT. Dash to Dock is GPL-2.0, the setup script downloads it, and its patch has the same license. Firmware belongs to Samsung and is not part of this repository.
+GNOME extension are MIT. Firmware belongs to Samsung and is not part of this repository.
