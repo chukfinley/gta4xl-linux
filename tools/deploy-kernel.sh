@@ -16,6 +16,6 @@ scp "${SSHOPTS[@]}" "$IMAGES/boot.img" "$IMAGES/vbmeta-linux.img" "root@$IP:/run
   dd if=/run/boot.img of=/dev/disk/by-partlabel/boot bs=1M conv=fsync status=none
   dd if=/run/vbmeta-linux.img of=/dev/disk/by-partlabel/vbmeta bs=64K conv=fsync status=none
   sync; rm /run/boot.img /run/vbmeta-linux.img
-  (sleep 1; systemctl reboot) >/dev/null 2>&1 &'
+  (sleep 1; systemctl reboot; sleep 25; echo b > /proc/sysrq-trigger) >/dev/null 2>&1 &'
 sha256sum "$IMAGES/boot.img" "$IMAGES/vbmeta-linux.img"
 echo "rebooting"
