@@ -3,6 +3,8 @@
 export XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=wayfire XDG_SESSION_DESKTOP=wayfire
 export WLR_RENDERER=gles2 WLR_DRM_NO_MODIFIERS=1 LIBSEAT_BACKEND=logind
 export QT_QPA_PLATFORM=wayland QT_WAYLAND_DISABLE_WINDOWDECORATION=1 GDK_BACKEND=wayland SDL_VIDEODRIVER=wayland
+# GTK 4 draws at the panel pixels, not at scale 2
+export GDK_DEBUG=gl-fractional
 export MOZ_ENABLE_WAYLAND=1 ELECTRON_OZONE_PLATFORM_HINT=wayland
 set -a
 . /etc/environment.d/90-panfork.conf
