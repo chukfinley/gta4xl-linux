@@ -9,6 +9,8 @@ export MOZ_ENABLE_WAYLAND=1 ELECTRON_OZONE_PLATFORM_HINT=wayland
 set -a
 . /etc/environment.d/90-panfork.conf
 set +a
+# Big core preference, see tablet-sched: it was the second largest gain during input
+echo $$ > /dev/stune/top-app/cgroup.procs 2>/dev/null
 PREFIX=/opt/wayfire
 # Keep the logs of the last sessions, a crash trace is at the end of its log
 LOGS="$HOME/.cache/tablet-desktop"
