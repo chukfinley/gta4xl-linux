@@ -566,3 +566,5 @@ Flutter results: Impeller on Mali (`OpenGLESSDF`), 0 GPU faults, touch events ar
 Pen: `tools/tablet/pen-test.py` writes events to `sec_e-pen` and logs what a GTK window receives. Axes: X 0 to 13536 on the short side, Y 0 to 22560, pressure 0 to 4095, no tilt. libinput gets position and pressure.
 
 The panel goes off on battery and the tablet sleeps after 120 s. Then only the Power key wakes it, and all SSH work stops. Connect the charger before long tests.
+
+Kernel #23: `dk_dumb_create` accepts each size in bits that is a multiple of 8, and `proc_mount` uses `sget_userns`. So Settings no longer needs `GSK_RENDERER=cairo`, and `bwrap` is no longer setuid.

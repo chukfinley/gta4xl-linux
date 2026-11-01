@@ -24,12 +24,6 @@ PIN
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends thunderbird thunderbird-locale-de 0ad
 
-# bwrap: proc_mount of this kernel calls sget() with the caller namespace, so a proc mount in a
-# new user and PID namespace gives EBUSY and each flatpak run fails. A setuid bwrap does not make
-# a user namespace. The override stays after a package update.
-dpkg-statoverride --list /usr/bin/bwrap >/dev/null ||
-    dpkg-statoverride --update --add root root 4755 /usr/bin/bwrap
-
 # Flatpak apps. Spot (dev.alextren.Spot) is end-of-life on Flathub, so it is not used.
 flatpak uninstall -y --noninteractive --system dev.alextren.Spot com.github.KRTirtho.Spotube io.github.hrkfdn.ncspot 2>/dev/null
 for app in org.signal.Signal org.jellyfin.JellyfinDesktop; do
@@ -47,9 +41,8 @@ flatpak override --system \
     --env=QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu \
     --nodevice=dri --nosocket=x11 --nosocket=fallback-x11
 flatpak override --system --nodevice=all --env=SIGNAL_DISABLE_GPU=1 org.signal.Signal
-# QtWebEngine stops with a setuid bwrap, so its inner sandbox is off. The Flatpak sandbox stays.
 # mpv in Jellyfin needs a GL context, so Qt Quick stays on GL (llvmpipe here).
-flatpak override --system --env=QTWEBENGINE_DISABLE_SANDBOX=1 --unset-env=QT_QUICK_BACKEND org.jellyfin.JellyfinDesktop
+flatpak override --system --unset-env=QT_QUICK_BACKEND org.jellyfin.JellyfinDesktop
 # Signal asks about its plain password store at first start. There is no keyring here.
 sudo -u user mkdir -p /home/user/.var/app/org.signal.Signal/config/Signal
 [ -e /home/user/.var/app/org.signal.Signal/config/Signal/config.json ] ||
