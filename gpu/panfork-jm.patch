@@ -14,21 +14,7 @@ diff -ru a/src/gallium/drivers/panfrost/pan_cmdstream.c b/src/gallium/drivers/pa
                  tiler = pan_pool_alloc_desc_cs_v10(&batch->pool.base, TILER_JOB);
 diff -ru a/src/panfrost/base/pan_vX_base.c b/src/panfrost/base/pan_vX_base.c
 --- a/src/panfrost/base/pan_vX_base.c	2022-12-10 01:57:43.000000000 +0100
-+++ b/src/panfrost/base/pan_vX_base.c	2026-11-01 02:21:47.173194996 +0100
-@@ -607,10 +607,10 @@
-         if (pan_flags & PANFROST_BO_HEAP) {
-                 size_t align_size = 2 * 1024 * 1024 / k->page_size; /* 2 MB */
- 
-+                /* Fully committed: the exynos kbase never completes a tiler heap fault */
-                 a.in.va_pages = ALIGN_POT(a.in.va_pages, align_size);
--                a.in.commit_pages = 0;
--                a.in.extension = align_size;
--                flags |= BASE_MEM_GROW_ON_GPF;
-+                a.in.commit_pages = a.in.va_pages;
-+                a.in.extension = 0;
-         }
- 
- #if PAN_BASE_API >= 1
++++ b/src/panfrost/base/pan_vX_base.c	2026-11-01 02:52:52.435218170 +0100
 @@ -851,7 +851,8 @@
          list_for_each_entry_safe(struct kbase_fence, fence, &o->fences, link) {
                  uint64_t value = k->event_slots[fence->slot].last;
@@ -39,7 +25,64 @@ diff -ru a/src/panfrost/base/pan_vX_base.c b/src/panfrost/base/pan_vX_base.c
                          LOG("syncobj %p slot %u value %"PRIu64" vs %"PRIu64"\n",
                              o, fence->slot, fence->value, value);
  
-@@ -1138,7 +1139,7 @@
+@@ -947,8 +948,8 @@
+                 util_dynarray_foreach(handles, int32_t, h) {
+                         if (*h >= size)
+                                 continue;
+-                        assert(handle_data[*h].use_count);
+-                        --handle_data[*h].use_count;
++                        if (handle_data[*h].use_count)
++                                --handle_data[*h].use_count;
+                 }
+                 util_dynarray_fini(handles);
+ 
+@@ -1117,6 +1118,29 @@
+         return a;
+ }
+ 
++/* The kernel has 256 atom numbers, and the number of each atom that is not
++ * finished holds its BO list. Stay well below that limit, because the tiler
++ * heap is in the BO list of nearly all atoms and use_count is 8 bits. */
++static void
++kbase_throttle_atoms(kbase k)
++{
++        for (;;) {
++                pthread_mutex_lock(&k->handle_lock);
++                uint8_t nr = k->atom_number;
++                bool busy = k->atom_bos[nr].data ||
++                            k->atom_bos[(uint8_t) (nr + 56)].data;
++                pthread_mutex_unlock(&k->handle_lock);
++
++                if (!busy)
++                        return;
++
++                struct kbase_wait_ctx wait = kbase_wait_init(k, 100000000LL);
++                kbase_wait_for_event(&wait);
++                kbase_wait_for_event(&wait);
++                kbase_wait_fini(wait);
++        }
++}
++
+ static int
+ kbase_submit(kbase k, uint64_t va, unsigned req,
+              struct kbase_syncobj *o,
+@@ -1128,6 +1152,8 @@
+         memcpy(util_dynarray_resize(&buf, int32_t, num_handles),
+                handles, num_handles * sizeof(int32_t));
+ 
++        kbase_throttle_atoms(k);
++
+         pthread_mutex_lock(&k->handle_lock);
+ 
+         unsigned slot = (req & PANFROST_JD_REQ_FS) ? 0 : 1;
+@@ -1135,10 +1161,14 @@
+ 
+         uint8_t nr = k->atom_number++;
+ 
++        /* For the kernel, a dependency on atom 0 means no dependency */
++        if (!nr)
++                nr = k->atom_number++;
++
          struct base_jd_atom_v2 atom = {
                  .jc = va,
                  .atom_number = nr,
@@ -67,6 +110,47 @@ diff -ru a/src/panfrost/lib/genxml/decode.c b/src/panfrost/lib/genxml/decode.c
                          fflush(NULL);
                          abort();
                  }
+diff -ru a/src/panfrost/lib/pan_bo.c b/src/panfrost/lib/pan_bo.c
+--- a/src/panfrost/lib/pan_bo.c	2022-12-10 01:57:43.000000000 +0100
++++ b/src/panfrost/lib/pan_bo.c	2026-11-01 02:51:02.229947062 +0100
+@@ -145,6 +145,12 @@
+         }
+ 
+         if (dev->kbase) {
++                /* JM kbase holds no BO references, unmapping a BO that a job
++                 * still uses gives a GPU fault. */
++                if (dev->arch < 10)
++                        kbase_wait_bo(&dev->mali, bo->gem_handle,
++                                      10 * 1000000000LL, true);
++
+                 os_munmap(bo->ptr.cpu, bo->size);
+                 if (bo->munmap_ptr)
+                         os_munmap(bo->munmap_ptr, bo->size);
+@@ -353,9 +359,10 @@
+                 /* If the oldest BO in the cache is busy, likely so is
+                  * everything newer, so bail. */
+ 
+-                /* For kbase, BOs are not added to the cache until the GPU is
+-                 * done with them, so there is no need to wait. */
+-                if (!dev->kbase) {
++                /* For CSF kbase, BOs are not added to the cache until the GPU
++                 * is done with them, so there is no need to wait. JM has no
++                 * such callback and must wait as the DRM driver does. */
++                if (!dev->kbase || dev->arch < 10) {
+                         if (!panfrost_bo_wait(entry, dontwait ? 0 : INT64_MAX,
+                                               PAN_BO_ACCESS_RW))
+                                 break;
+@@ -451,8 +458,8 @@
+         clock_gettime(CLOCK_MONOTONIC, &time);
+         bo->last_used = time.tv_sec;
+ 
+-        /* For kbase, the GPU can't be accessing this BO any more */
+-        if (dev->kbase)
++        /* For CSF kbase, the GPU can't be accessing this BO any more */
++        if (dev->kbase && dev->arch >= 10)
+                 bo->gpu_access = 0;
+ 
+         /* Let's do some cleanup in the BO cache while we hold the
 diff -ru a/src/panfrost/lib/pan_cs.c b/src/panfrost/lib/pan_cs.c
 --- a/src/panfrost/lib/pan_cs.c	2022-12-10 01:57:43.000000000 +0100
 +++ b/src/panfrost/lib/pan_cs.c	2026-11-01 02:29:18.954258613 +0100
@@ -90,15 +174,3 @@ diff -ru a/src/panfrost/lib/pan_cs.c b/src/panfrost/lib/pan_cs.c
          }
  }
  #endif
-diff -ru a/src/panfrost/lib/pan_props.c b/src/panfrost/lib/pan_props.c
---- a/src/panfrost/lib/pan_props.c	2022-12-10 01:57:43.000000000 +0100
-+++ b/src/panfrost/lib/pan_props.c	2026-11-01 02:21:47.177194886 +0100
-@@ -359,7 +359,7 @@
-          * shared across batches/contextes */
- 
-         if (dev->arch < 10)
--                dev->tiler_heap = panfrost_bo_create(dev, 128 * 1024 * 1024,
-+                dev->tiler_heap = panfrost_bo_create(dev, 48 * 1024 * 1024,
-                                              PAN_BO_INVISIBLE | PAN_BO_GROWABLE, "Tiler heap");
- 
-         pthread_mutex_init(&dev->submit_lock, NULL);

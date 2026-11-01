@@ -130,13 +130,24 @@ GBM_BACKENDS_PATH=/opt/panfork/lib/gbm __EGL_VENDOR_LIBRARY_DIRS=/opt/panfork/sh
 MESA_LOADER_DRIVER_OVERRIDE=exynos glmark2-es2-drm --off-screen -b build`. Panfork opens /dev/mali0
 through kmsro when the driver name is exynos.
 
-Fixed for JM on v6: unreachable() after the IDVS branch, heap bottom without +64, fence compare
-and job sequence start, committed tiler heap, Tiler Context state words only on v10.
-Root cause of the draw hang: Panfork set `tiler.state.word1` and `word3` for all arches. These
-values are for CSF. On v6 the tiler job got DATA_INVALID_FAULT (0x58) or stopped. The kernel log
-showed TERMINATED and a page fault at a job header. These are follow-up errors.
-State: renderer is "Mali-G72 (Panfrost)". glmark2-es2-drm --off-screen, 1200x2000: build 408 FPS,
-shading 403 FPS, texture 350 FPS, 0 GPU faults.
+Fixed for JM on v6:
+- `unreachable()` after the IDVS branch, heap bottom without +64, fence compare, job sequence start.
+- Tiler Context state words only on v10. Panfork set `tiler.state.word1` and `word3` for all
+  arches. On v6 the tiler job got DATA_INVALID_FAULT (0x58) or stopped. This was the draw hang.
+  The kernel log showed TERMINATED and a page fault at a job header, these are follow-up errors.
+- BO lifetime. kbase holds no BO references. The CSF free callback does nothing on JM, because
+  `event_slot_usage` is 0 there. So `pan_bo.c` now waits for `use_count` before it unmaps a BO, and
+  the BO cache waits as on the DRM driver. Without this the heavy scenes gave 0x58, 0x59 and 0x42.
+- Atom numbers. `pre_dep.atom_id == 0` means no dependency, so the driver must not use atom 0.
+  Without this a fragment job after atom 0 started before its tiler job and read an unmapped heap.
+  `kbase_throttle_atoms()` keeps 56 atom numbers free, `use_count` is 8 bits.
+The tiler heap stays growable (`BASE_MEM_GROW_ON_GPF`, 128 MB of VA). Grow on fault works on this
+kernel.
+
+State: renderer is "Mali-G72 (Panfrost)". glmark2-es2-drm --off-screen, 1200x2000: build 505 FPS,
+shading 431 FPS, texture 500 FPS, 0 GPU faults, all scenes run.
+glmark2 `--validate` forces 800x600 on X11 only. On DRM the surface stays 1200x2000, so the shading
+and texture references do not match. That is not a render fault.
 
 Debug notes:
 - Exception status in a job header: bits 7:0 type, 9:8 access, 31:16 source. 0x10258 is 0x58
