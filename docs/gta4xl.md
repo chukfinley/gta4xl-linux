@@ -34,8 +34,8 @@ software". That screen still accepts a flash, and a clean session clears it.
   as a USB drive.
 - Files in the initramfs `/overlay` are copied onto the rootfs at each boot. Use this to change
   the rootfs without SSH.
-- Access: ttyACM0 (`tools/tty-run.py`), telnet (debug shell), SSH `user@172.16.42.1` (Ubuntu,
-  password `gta4xl`). The host side is the NetworkManager profile `gta4xl-usb`, MAC
+- Access: ttyACM0 (`tools/tty-run.py`), telnet (debug shell), SSH over WLAN or Tailscale (Ubuntu,
+  keys only). The host side is the NetworkManager profile `gta4xl-usb`, MAC
   `02:47:54:41:34:02`, 172.16.42.2/24.
 
 ## Button sequences

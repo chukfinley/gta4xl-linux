@@ -51,7 +51,7 @@ The firmware comes from your own tablet. Samsung files are not part of this repo
 2. Put the tablet into download mode, see the button sequence in `docs/gta4xl.md`.
 3. Run `tools/flash-linux.sh`. Run one heimdall session per step if a session fails.
 4. Boot the debug recovery, then write the rootfs: `tools/write-to-gadget.py out/rootfs.ext4`.
-5. Start normally. Login: `user`, password `gta4xl`. Change it.
+5. Start normally. The tablet logs in and locks at once. PIN `1234`, it is the password of `user`.
 
 After the first boot, new kernels install from Ubuntu with `tools/deploy-kernel.sh`.
 Run `tools/tablet/tune.sh`, `tools/tablet/install-apps.sh` and `tools/tablet/t3-service.sh` on the

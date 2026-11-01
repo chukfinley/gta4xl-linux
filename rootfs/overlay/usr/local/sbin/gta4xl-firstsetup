@@ -24,7 +24,7 @@ EOF
 
 if ! id user >/dev/null 2>&1; then
 	useradd -m -s /bin/bash -G sudo,video,audio,input,render,bluetooth,netdev,plugdev user
-	echo 'user:gta4xl' | chpasswd
+	echo 'user:1234' | chpasswd
 fi
 
 systemctl enable NetworkManager ssh bluetooth gdm3 systemd-timesyncd gta4xl-usb-gadget.service serial-getty@ttyGS0.service

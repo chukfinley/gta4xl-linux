@@ -149,7 +149,7 @@ class ResizeHandle {
 }
 
 // PIN pad on the lock screen. The user password is the PIN, PAM stays unchanged.
-const PIN_LENGTH = 8;
+const PIN_LENGTH = 4;
 
 function addPinPad(dialog) {
     const prompt = dialog._authPrompt;
