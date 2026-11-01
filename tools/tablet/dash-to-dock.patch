@@ -1,0 +1,162 @@
+diff --git a/appIcons.js b/appIcons.js
+index 5b26094..50c4102 100644
+--- a/appIcons.js
++++ b/appIcons.js
+@@ -15,6 +15,7 @@ import {
+     AppDisplay,
+     AppFavorites,
+     BoxPointer,
++    DND,
+     Dash,
+     Main,
+     PopupMenu,
+@@ -517,6 +518,9 @@ export const DockAbstractAppIcon = GObject.registerClass({
+     }
+ 
+     _activate({button, modifiers, clickCount = 1}) {
++        // gta4xl: St.Button emits clicked with button 0 for a touch, this is a primary click
++        button ||= 1;
++
+         // Only consider SHIFT and CONTROL as modifiers (exclude SUPER, CAPS-LOCK, etc.)
+         modifiers &= Clutter.ModifierType.SHIFT_MASK | Clutter.ModifierType.CONTROL_MASK;
+ 
+@@ -1276,6 +1280,9 @@ const DockAppIconMenu = class DockAppIconMenu extends PopupMenu.PopupMenu {
+         this.addMenuItem(dynamicSection, i);
+         this.emit('dynamic-section-changed', dynamicSection);
+ 
++        // gta4xl: window actions of the tablet extension
++        Main.layoutManager.gta4xlDock?.extendMenu(this, this.sourceActor);
++
+         // quit menu
+         this._appendSeparator();
+         this._quitMenuItem = this._appendMenuItem(_('Quit'));
+@@ -1425,6 +1432,41 @@ export function getInterestingWindows(windows, monitorIndex) {
+  *
+  */
+ 
++// gta4xl: a dock button for all windows, the same as a swipe from the bottom edge
++export const DockWindowsIcon = GObject.registerClass(
++class DockWindowsIcon extends Dash.ShowAppsIcon {
++    _init() {
++        super._init();
++        this.toggleButton.toggle_mode = false;
++        this.setLabelText(__('All Windows'));
++        this.toggleButton.connect('clicked', () => {
++            const {showAppsButton} = Main.overview.dash;
++            if (Main.overview.visible && showAppsButton.checked) {
++                showAppsButton._fromDesktop = false; // or the overview closes
++                showAppsButton.checked = false;
++            } else {
++                Main.overview.toggle();
++            }
++        });
++    }
++
++    _createIcon(size) {
++        return new St.Icon({
++            icon_name: 'focus-windows-symbolic',
++            icon_size: Math.round(size * 0.62),
++            style_class: 'show-apps-icon',
++        });
++    }
++
++    acceptDrop() {
++        return false;
++    }
++
++    handleDragOver() {
++        return DND.DragMotionResult.NO_DROP;
++    }
++});
++
+ export const DockShowAppsIcon = GObject.registerClass({
+     Signals: {
+         'menu-state-changed': {param_types: [GObject.TYPE_BOOLEAN]},
+diff --git a/dash.js b/dash.js
+index 8b696eb..c36eab1 100644
+--- a/dash.js
++++ b/dash.js
+@@ -239,6 +239,15 @@ export const DockDash = GObject.registerClass({
+         this._showAppsIcon.connect('menu-state-changed', (_icon, opened) => {
+             this._itemMenuStateChanged(this._showAppsIcon, opened);
+         });
++        // gta4xl: the button for all windows, left of the app grid button
++        this._windowsIcon = new AppIcons.DockWindowsIcon();
++        this._windowsIcon.show(false);
++        this._windowsIcon.icon.setIconSize(this.iconSize);
++        this._windowsIcon.x_expand = false;
++        this._windowsIcon.y_expand = false;
++        this._hookUpLabel(this._windowsIcon);
++        this._dashContainer.add_child(this._windowsIcon);
++
+         this.updateShowAppsButton();
+ 
+         this._background = new St.Widget({
+diff --git a/docking.js b/docking.js
+index afda08e..05e6e10 100644
+--- a/docking.js
++++ b/docking.js
+@@ -2155,7 +2155,14 @@ export class DockManager {
+         ], [
+             Main.sessionMode,
+             'updated',
+-            this._toggle.bind(this),
++            // gta4xl: stays through the lock screen, a rebuild would drop the struts and each
++            // maximized window would redraw twice
++            () => {
++                const locked = Main.sessionMode.isLocked;
++                if (!locked && !this._wasLocked)
++                    this._toggle();
++                this._wasLocked = locked;
++            },
+         ], [
+             this._settings,
+             'changed::multi-monitor',
+diff --git a/metadata.json b/metadata.json
+index e7bfc9a..4abdd38 100644
+--- a/metadata.json
++++ b/metadata.json
+@@ -15,5 +15,9 @@
+   ],
+   "url": "https://micheleg.github.io/dash-to-dock/",
+   "uuid": "dash-to-dock@micxgx.gmail.com",
+-  "version": 110
+-}
+\ No newline at end of file
++  "version": 110,
++  "session-modes": [
++    "user",
++    "unlock-dialog"
++  ]
++}
+diff --git a/windowPreview.js b/windowPreview.js
+index d27ee22..0261089 100644
+--- a/windowPreview.js
++++ b/windowPreview.js
+@@ -351,7 +351,6 @@ class WindowPreviewMenuItem extends PopupMenu.PopupBaseMenuItem {
+         const buttonLayout = Meta.prefs_get_button_layout();
+         this.closeButton = new St.Button({
+             style_class: 'window-close',
+-            opacity: 0,
+             x_expand: true,
+             y_expand: true,
+             x_align: buttonLayout.left_buttons.includes(Meta.ButtonFunction.CLOSE)
+@@ -602,17 +601,8 @@ class WindowPreviewMenuItem extends PopupMenu.PopupBaseMenuItem {
+         }
+     }
+ 
++    // gta4xl: a touch has no hover, the button stays
+     _hideCloseButton() {
+-        if (this.closeButton.has_pointer ||
+-            this.get_children().some(a => a.has_pointer))
+-            return;
+-
+-        this.closeButton.remove_all_transitions();
+-        this.closeButton.ease({
+-            opacity: 0,
+-            duration: Workspace.WINDOW_OVERLAY_FADE_TIME,
+-            mode: Clutter.AnimationMode.EASE_IN_QUAD,
+-        });
+     }
+ 
+     show(animate) {

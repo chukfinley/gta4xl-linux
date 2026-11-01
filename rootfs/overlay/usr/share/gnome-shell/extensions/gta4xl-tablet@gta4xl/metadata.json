@@ -1,7 +1,7 @@
 {
   "uuid": "gta4xl-tablet@gta4xl",
   "name": "Tablet gestures",
-  "description": "Edge swipes, window grabbers, secondary click, on-screen keyboard rule, Night Light shader",
+  "description": "Edge swipes, window grabbers, dock window actions, secondary click, on-screen keyboard rule, Night Light shader",
   "shell-version": [
     "46"
   ],

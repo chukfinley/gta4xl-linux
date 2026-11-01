@@ -9,6 +9,7 @@
 // Windows have the iPadOS grabbers: an arc at the bottom right corner and a bar at the top, see
 // WindowHandles. Long press and two finger tap give a secondary click, see TouchGestures.
 // GJS OSK runs only while no physical keyboard is connected, see _syncOsk.
+// Dash to Dock is the dock, dock.js adds the window actions.
 import Cairo from 'cairo';
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
@@ -23,6 +24,8 @@ import * as EdgeDragAction from 'resource:///org/gnome/shell/ui/edgeDragAction.j
 import * as Keyboard from 'resource:///org/gnome/shell/ui/keyboard.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as UnlockDialog from 'resource:///org/gnome/shell/ui/unlockDialog.js';
+
+import {DockActions} from './dock.js';
 
 const NightEffect = GObject.registerClass(
 class NightEffect extends Clutter.ShaderEffect {
@@ -163,8 +166,8 @@ class WindowHandles {
         this._halves.delete(win);
     }
 
-    _area() {
-        return Main.layoutManager.getWorkAreaForMonitor(this._win.get_monitor());
+    _area(win = this._win) {
+        return Main.layoutManager.getWorkAreaForMonitor(win.get_monitor());
     }
 
     // Where a drop at this point puts the window: 'left', 'right', 'top' or null
@@ -183,11 +186,12 @@ class WindowHandles {
         this._preview.visible = true;
     }
 
-    _showPreview(snap) {
+    // win is the window that the drop would move, the dock drags also use this for other windows
+    showPreview(snap, win = this._win) {
         this._preview.visible = false;
         if (!snap)
             return;
-        const area = this._area();
+        const area = this._area(win);
         const half = Math.floor(area.width / 2);
         this._place(snap === 'right' ? area.x + half : area.x, area.y,
             snap === 'top' ? area.width : half, area.height);
@@ -197,6 +201,18 @@ class WindowHandles {
         const {rect, x: startX, y: startY} = this._drag;
         return [Math.max(MIN_WIDTH, rect.width + x - startX),
             Math.max(MIN_HEIGHT, rect.height + y - startY)];
+    }
+
+    // Fills one half of the work area. A later drag restores the size from before.
+    snap(win, side) {
+        if (win.get_maximized())
+            win.unmaximize(Meta.MaximizeFlags.BOTH);
+        const {width, height} = win.get_frame_rect();
+        const area = this._area(win);
+        const half = Math.floor(area.width / 2);
+        this._halves.set(win, {width, height});
+        win.move_resize_frame(true, side === 'right' ? area.x + half : area.x, area.y, half,
+            area.height);
     }
 
     update(x, y) {
@@ -216,7 +232,7 @@ class WindowHandles {
             Math.max(start, Math.min(value, start + length - size));
         this._win.move_frame(true, keep(x - width / 2, area.x, area.width, width),
             keep(y - BAR_ZONE_HEIGHT / 2, area.y, area.height, height));
-        this._showPreview(this._snapAt(x, y));
+        this.showPreview(this._snapAt(x, y));
     }
 
     end(x, y) {
@@ -230,16 +246,10 @@ class WindowHandles {
             win.move_resize_frame(true, rect.x, rect.y, width, height);
         } else if (win) {
             const snap = this._snapAt(x, y);
-            if (snap === 'top') {
+            if (snap === 'top')
                 win.maximize(Meta.MaximizeFlags.BOTH);
-            } else if (snap) {
-                const {width, height} = win.get_frame_rect();
-                const area = this._area();
-                const half = Math.floor(area.width / 2);
-                this._halves.set(win, {width, height});
-                win.move_resize_frame(true, snap === 'right' ? area.x + half : area.x, area.y,
-                    half, area.height);
-            }
+            else if (snap)
+                this.snap(win, snap);
         }
         this._drag = null;
     }
@@ -599,6 +609,7 @@ export default class TabletGestures {
 
         this._handles = new WindowHandles();
         this._gestures = new TouchGestures(this._handles);
+        this._dock = new DockActions(this._handles);
         this._windowId = global.display.connect('window-created',
             (_d, win) => this._onWindowCreated(win));
         this._night = new NightEffect();
@@ -638,6 +649,8 @@ export default class TabletGestures {
         UnlockDialog.UnlockDialog.prototype._ensureAuthPrompt = this._ensureAuthPrompt;
         Keyboard.Keyboard.prototype.open = this._keyboardOpen;
         global.display.disconnect(this._windowId);
+        this._dock.destroy();
+        this._dock = null;
         this._gestures.destroy();
         this._gestures = null;
         this._handles.destroy();

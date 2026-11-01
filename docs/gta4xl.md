@@ -525,6 +525,39 @@ the web app gets a second icon in the dock. The name comes from the `--app` URL 
 
 If Tablet Shell runs on the tablet, it skips its own Dock when Dash to Dock is in `enabled-extensions`.
 
+`spotify-web.desktop` exists only after `WITH_SPOTIFY=1 tools/tablet/more-apps.sh`. The shell skips a pin
+with no desktop file, so the dock then has one icon less.
+
+Frame time on the tablet, 2026-11-01, stage `after-paint` intervals. Overview: touch up to the last
+frame, swipe at the gap left of the dock, 10 transitions per run, 2 windows. Drag: top bar drag of Text
+Editor, 4 or 6 drags per run. The dock comes off with `disableExtension`. Other agents used the tablet
+during all runs (load 17 to 20), so the tail values are noise. Each pair is from the same period.
+
+| Run | Dock | Frames | p50 | p95 | max | Total |
+|---|---|---|---|---|---|---|
+| Overview | on | 78 | 24.7 ms | 59 ms | 68 ms | 228 ms |
+| Overview | off | 61 | 27.8 ms | 58 ms | 107 ms | 204 ms |
+| Overview | on | 57 | 30.2 ms | 75 ms | 79 ms | 200 ms |
+| Overview | off | 60 | 32.5 ms | 76 ms | 137 ms | 209 ms |
+| Overview | on | 66 | 29.8 ms | 130 ms | 141 ms | 262 ms |
+| Overview | off | 74 | 27.1 ms | 74 ms | 155 ms | 250 ms |
+| Drag | on | 332 | 17.2 ms | 28 ms | 86 ms | |
+| Drag | off | 221 | 17.1 ms | 30 ms | 485 ms | |
+| Drag | on | 415 | 18.1 ms | 168 ms | 336 ms | |
+| Drag | off | 245 | 17.7 ms | 136 ms | 308 ms | |
+
+The dock adds no cost that these runs can show: p50 stays within the spread between runs of one mode.
+The overview shows only 5 to 8 frames in about 200 ms, with and without the dock. The cause is the
+stall of the first frame, a timeline then ends after few frames.
+
+`disableExtension` takes 315 ms and `enableExtension` 405 ms in the shell thread. The lock screen uses
+neither, the extension stays on.
+
+The panel stays off after a new login until a touch or key arrives, and on battery `gta4xl-powerkey`
+then starts deep sleep after 120 s. WLAN is off in sleep, so SSH tests need the charger. Check
+`/sys/class/drm/card0-DSI-1/dpms` before a test: touch injection does nothing while the daemon has the
+grab on the touchscreen.
+
 Test without the tablet: a headless shell on the PC with both extensions, see "Touch and windows".
 Injected touch shows all the points above. In `gdbus call`, `\n` in a JS string becomes a real line
 break, and `Clutter.get_current_event().get_event_sequence()` gives a new object for each call, so

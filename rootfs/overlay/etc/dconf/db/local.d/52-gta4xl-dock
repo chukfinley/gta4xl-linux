@@ -1,0 +1,26 @@
+# Dash to Dock, see tools/tablet/dock-setup.sh. The dock is always on the screen, windows stop above it.
+[org/gnome/shell]
+favorite-apps=['brave-browser.desktop', 'org.gnome.Nautilus.desktop', 't3code.desktop', 'org.gnome.Terminal.desktop', 'org.gnome.Settings.desktop']
+
+[org/gnome/shell/extensions/dash-to-dock]
+dock-position='BOTTOM'
+dock-fixed=true
+autohide=false
+intellihide=false
+extend-height=false
+height-fraction=1.0
+dash-max-icon-size=44
+icon-size-fixed=true
+show-trash=false
+show-mounts=false
+show-show-apps-button=true
+show-apps-at-top=false
+show-apps-always-in-the-edge=true
+click-action='focus-minimize-or-previews'
+scroll-action='do-nothing'
+hot-keys=false
+running-indicator-style='DOTS'
+transparency-mode='FIXED'
+background-opacity=0.94
+dance-urgent-applications=false
+bolt-support=false

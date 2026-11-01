@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=YouTube
+Exec=brave-browser --app=https://www.youtube.com
+Icon=/usr/share/pixmaps/web-youtube.svg
+StartupWMClass=brave-www.youtube.com__-Default
+Type=Application
+Categories=Network;AudioVideo;
