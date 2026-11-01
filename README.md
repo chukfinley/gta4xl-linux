@@ -13,18 +13,20 @@ are not tested. You do this at your own risk.
 | Boot, systemd, GDM | works |
 | Display (own DRM/KMS driver over DECON) | works, GNOME Wayland |
 | Touch | works |
-| On-screen keyboard | works |
-| Bottom edge swipe, touch resize handle, maximized windows | works, gnome-shell extension |
-| Night Light | works, shader in the extension (no gamma LUT) |
+| On-screen keyboard | GJS OSK with Esc, Ctrl, Tab and arrows, only with no physical keyboard |
+| Edge swipes | bottom overview, top right quick settings, top middle calendar, also in full screen |
+| Window handling | iPadOS grabbers: corner arc with outline resize, top bar with snap to half or full |
+| Right click by touch | long press and two finger tap, in all apps |
+| Night Light | works in Settings, shader in the extension, the kernel ignores the LUT |
 | Power key | panel off and on, touch locked while off, deep sleep after 2 min |
 | Battery | percent and time estimate through UPower |
 | SD card | works, ext4 on /media/sd |
 | Tailscale, Brave, T3 Code, Claude and Codex CLI | work |
 | WLAN | works |
-| Bluetooth (BlueZ, A2DP) | works, SBC codec |
+| Bluetooth (BlueZ, A2DP) | keyboard works, buds drop the link after seconds, see docs |
 | Sensor hub, auto rotation | works |
 | Pen | detected by libinput, test open |
-| Audio | Bluetooth A2DP works. Speaker sink in PipeWire with GNOME volume, jack route. Confirmation by ear open. No microphone |
+| Audio | Bluetooth A2DP: CMF Buds drop the link, open. Speaker sink in PipeWire with GNOME volume, jack route. Confirmation by ear open. No microphone |
 | Video | mpv and Celluloid, 1080p30 H.264 on Panfork with no dropped frames, large touch controls in mpv |
 | GPU (Mali-G72) | Panfork: GNOME Shell, Wayland clients, mpv, Brave, T3 Code and Mattermost on the GPU |
 | Suspend | deep sleep works, automatic with the panel off on battery. Power key wake: test open |
@@ -56,7 +58,7 @@ The firmware comes from your own tablet. Samsung files are not part of this repo
 
 After the first boot, new kernels install from Ubuntu with `tools/deploy-kernel.sh`.
 Run `tools/tablet/tune.sh`, `tools/tablet/install-apps.sh`, `tools/tablet/t3-service.sh` and
-`tools/tablet/media-setup.sh` on the tablet as root. `tools/tablet/build-panfork.sh` builds the GPU driver on the tablet.
+`tools/tablet/media-setup.sh` and `tools/tablet/osk-setup.sh` on the tablet as root. `tools/tablet/build-panfork.sh` builds the GPU driver on the tablet.
 
 ## Publish
 

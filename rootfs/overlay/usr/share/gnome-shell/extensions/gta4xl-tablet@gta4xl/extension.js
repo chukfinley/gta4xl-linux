@@ -4,8 +4,12 @@
 // Night Light: the kernel offers a gamma LUT only so that mutter and Settings accept Night Light.
 // DECON ignores the LUT, a shader on the whole UI multiplies the colours instead.
 //
-// Long press and two finger tap give a secondary click in app windows, see TouchSecondary.
+// Swipe down from the top edge, by position: right quick settings, middle calendar, left leaves
+// full screen.
+// Windows have the iPadOS grabbers: an arc at the bottom right corner and a bar at the top, see
+// WindowHandles. Long press and two finger tap give a secondary click, see TouchGestures.
 // GJS OSK runs only while no physical keyboard is connected, see _syncOsk.
+import Cairo from 'cairo';
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -14,6 +18,7 @@ import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 
+import * as BoxPointer from 'resource:///org/gnome/shell/ui/boxpointer.js';
 import * as EdgeDragAction from 'resource:///org/gnome/shell/ui/edgeDragAction.js';
 import * as Keyboard from 'resource:///org/gnome/shell/ui/keyboard.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -44,26 +49,47 @@ class NightEffect extends Clutter.ShaderEffect {
     }
 });
 
-// A window corner is too small for a finger: this handle follows the focused window.
-const HANDLE_SIZE = 72;
-const MIN_WIDTH = 480;
-const MIN_HEIGHT = 360;
+// iPadOS window grabbers for the focused window. They only draw, so a tap still reaches the app.
+// TouchGestures takes the touch when it moves in a grab zone. A corner drag moves only an outline
+// in the compositor, the client gets one resize at the end: apps redraw too slowly to follow.
+const CHROME = {affectsInputRegion: false};
+const MIN_WIDTH = 360;
+const MIN_HEIGHT = 300;
+const SNAP_EDGE = 32;
+const CORNER_RADIUS = 14; // of a GTK window
+const ARC_GAP = 5;
+const ARC_SIZE = 30;
+const ARC_CORNER = 20; // the window corner, inside the arc actor
+const ARC_MAX_INSET = 8;
+const CORNER_ZONE_IN = 56;
+const CORNER_ZONE_OUT = 28;
+const BAR_WIDTH = 44;
+const BAR_ZONE_WIDTH = 140;
+const BAR_ZONE_HEIGHT = 34;
 
-class ResizeHandle {
+function drawArc(area) {
+    const cr = area.get_context();
+    const center = ARC_CORNER - CORNER_RADIUS;
+    cr.setLineCap(Cairo.LineCap.ROUND);
+    // The dark line keeps the arc visible over a light window
+    [[6, 0, 0.3], [3.5, 1, 0.95]].forEach(([width, grey, alpha]) => {
+        cr.setLineWidth(width);
+        cr.setSourceRGBA(grey, grey, grey, alpha);
+        cr.arc(center, center, CORNER_RADIUS + ARC_GAP, 0.03 * Math.PI, 0.47 * Math.PI);
+        cr.stroke();
+    });
+    cr.$dispose();
+}
+
+class WindowHandles {
     constructor() {
-        this.actor = new St.Button({
-            style_class: 'gta4xl-resize-handle',
-            child: new St.Icon({icon_name: 'object-flip-vertical-symbolic', icon_size: 28}),
-            width: HANDLE_SIZE,
-            height: HANDLE_SIZE,
-            reactive: true,
-            can_focus: false,
-            visible: false,
-        });
-        this.actor.child.rotation_angle_z = -45;
-        this.actor.child.set_pivot_point(0.5, 0.5);
-        Main.layoutManager.addTopChrome(this.actor);
-        this.actor.connect('captured-event', (_a, event) => this._onEvent(event));
+        this._arc = new St.DrawingArea({width: ARC_SIZE, height: ARC_SIZE, visible: false});
+        this._arc.connect('repaint', drawArc);
+        this._bar = new St.Widget({style_class: 'gta4xl-window-bar', visible: false});
+        this._preview = new St.Widget({style_class: 'gta4xl-snap-preview', visible: false});
+        this._actors = [this._preview, this._arc, this._bar];
+        this._actors.forEach(actor => Main.layoutManager.addTopChrome(actor, CHROME));
+        this._halves = new WeakMap(); // size of a window before it filled half of the screen
         this._focusId = global.display.connect('notify::focus-window', () => this._track());
         this._overviewIds = [
             Main.overview.connect('showing', () => this._sync()),
@@ -98,66 +124,144 @@ class ResizeHandle {
 
     _sync() {
         const win = this._win;
-        const show = win && !Main.overview.visible && !win.fullscreen &&
-            !win.get_maximized() && win.allows_resize();
-        this.actor.visible = !!show;
-        if (show) {
-            const r = win.get_frame_rect();
-            this.actor.set_position(r.x + r.width - HANDLE_SIZE * 0.7,
-                r.y + r.height - HANDLE_SIZE * 0.7);
-        }
+        const show = !!win && !Main.overview.visible && !win.fullscreen;
+        this._arc.visible = show && win.resizeable;
+        this._bar.visible = show;
+        if (!show)
+            return;
+        const r = win.get_frame_rect();
+        // A maximized window has its corner at the screen edge, the arc must stay on the screen
+        const inset = ARC_CORNER + (win.get_maximized() ? ARC_MAX_INSET : 0);
+        this._arc.set_position(r.x + r.width - inset, r.y + r.height - inset);
+        this._bar.set_position(r.x + Math.round((r.width - BAR_WIDTH) / 2), r.y + 4);
     }
 
-    _onEvent(event) {
-        const type = event.type();
-        const [x, y] = event.get_coords();
-        if (type === Clutter.EventType.TOUCH_BEGIN || type === Clutter.EventType.BUTTON_PRESS) {
-            if (!this._win)
-                return Clutter.EVENT_PROPAGATE;
-            this._start = {x, y, rect: this._win.get_frame_rect()};
-            this._grab = global.stage.grab(this.actor);
-            return Clutter.EVENT_STOP;
+    // The grab zone at this point, 'corner', 'bar' or null
+    zoneAt(x, y) {
+        if (!this._bar.visible)
+            return null;
+        const r = this._win.get_frame_rect();
+        const right = r.x + r.width, bottom = r.y + r.height;
+        if (this._arc.visible && x > right - CORNER_ZONE_IN && x < right + CORNER_ZONE_OUT &&
+            y > bottom - CORNER_ZONE_IN && y < bottom + CORNER_ZONE_OUT)
+            return 'corner';
+        if (Math.abs(x - (r.x + r.width / 2)) < BAR_ZONE_WIDTH / 2 && y >= r.y &&
+            y < r.y + BAR_ZONE_HEIGHT)
+            return 'bar';
+        return null;
+    }
+
+    begin(zone, x, y) {
+        const win = this._win;
+        this._drag = {zone, x, y, rect: win.get_frame_rect()};
+        if (zone === 'bar' && win.get_maximized()) {
+            win.unmaximize(Meta.MaximizeFlags.BOTH);
+        } else if (zone === 'bar' && this._halves.has(win)) {
+            const {width, height} = this._halves.get(win);
+            win.move_resize_frame(true, x - width / 2, this._drag.rect.y, width, height);
         }
-        if (!this._start)
-            return Clutter.EVENT_PROPAGATE;
-        if (type === Clutter.EventType.TOUCH_UPDATE || type === Clutter.EventType.MOTION) {
-            const now = GLib.get_monotonic_time();
-            if (now - (this._last ?? 0) > 66000) {
-                this._last = now;
-                const {rect} = this._start;
-                this._win?.move_resize_frame(true, rect.x, rect.y,
-                    Math.max(MIN_WIDTH, rect.width + x - this._start.x),
-                    Math.max(MIN_HEIGHT, rect.height + y - this._start.y));
+        this._halves.delete(win);
+    }
+
+    _area() {
+        return Main.layoutManager.getWorkAreaForMonitor(this._win.get_monitor());
+    }
+
+    // Where a drop at this point puts the window: 'left', 'right', 'top' or null
+    _snapAt(x, y) {
+        const area = this._area();
+        if (y < area.y + SNAP_EDGE)
+            return 'top';
+        if (x < area.x + SNAP_EDGE)
+            return 'left';
+        return x > area.x + area.width - SNAP_EDGE ? 'right' : null;
+    }
+
+    _place(x, y, width, height) {
+        this._preview.set_position(x, y);
+        this._preview.set_size(width, height);
+        this._preview.visible = true;
+    }
+
+    _showPreview(snap) {
+        this._preview.visible = false;
+        if (!snap)
+            return;
+        const area = this._area();
+        const half = Math.floor(area.width / 2);
+        this._place(snap === 'right' ? area.x + half : area.x, area.y,
+            snap === 'top' ? area.width : half, area.height);
+    }
+
+    _size(x, y) {
+        const {rect, x: startX, y: startY} = this._drag;
+        return [Math.max(MIN_WIDTH, rect.width + x - startX),
+            Math.max(MIN_HEIGHT, rect.height + y - startY)];
+    }
+
+    update(x, y) {
+        if (!this._win)
+            return;
+        if (this._drag.zone === 'corner') {
+            const {rect} = this._drag;
+            const [width, height] = this._size(x, y);
+            this._place(rect.x, rect.y, width, height);
+            this._arc.set_position(rect.x + width - ARC_CORNER, rect.y + height - ARC_CORNER);
+            return;
+        }
+        const area = this._area();
+        const {width, height} = this._win.get_frame_rect();
+        // The window stays on the screen, the finger alone reaches the snap zones
+        const keep = (value, start, length, size) =>
+            Math.max(start, Math.min(value, start + length - size));
+        this._win.move_frame(true, keep(x - width / 2, area.x, area.width, width),
+            keep(y - BAR_ZONE_HEIGHT / 2, area.y, area.height, height));
+        this._showPreview(this._snapAt(x, y));
+    }
+
+    end(x, y) {
+        const win = this._win;
+        this._preview.visible = false;
+        if (win && this._drag.zone === 'corner') {
+            const {rect} = this._drag;
+            const [width, height] = this._size(x, y);
+            if (win.get_maximized())
+                win.unmaximize(Meta.MaximizeFlags.BOTH);
+            win.move_resize_frame(true, rect.x, rect.y, width, height);
+        } else if (win) {
+            const snap = this._snapAt(x, y);
+            if (snap === 'top') {
+                win.maximize(Meta.MaximizeFlags.BOTH);
+            } else if (snap) {
+                const {width, height} = win.get_frame_rect();
+                const area = this._area();
+                const half = Math.floor(area.width / 2);
+                this._halves.set(win, {width, height});
+                win.move_resize_frame(true, snap === 'right' ? area.x + half : area.x, area.y,
+                    half, area.height);
             }
-            return Clutter.EVENT_STOP;
         }
-        if (type === Clutter.EventType.TOUCH_END || type === Clutter.EventType.TOUCH_CANCEL ||
-            type === Clutter.EventType.BUTTON_RELEASE) {
-            this._grab?.dismiss();
-            this._grab = null;
-            this._start = null;
-            this._sync();
-            return Clutter.EVENT_STOP;
-        }
-        return Clutter.EVENT_PROPAGATE;
+        this._drag = null;
     }
 
     destroy() {
-        this._grab?.dismiss();
         this._disconnectWindow();
         global.display.disconnect(this._focusId);
         this._overviewIds.forEach(id => Main.overview.disconnect(id));
-        Main.layoutManager.removeChrome(this.actor);
-        this.actor.destroy();
+        this._actors.forEach(actor => {
+            Main.layoutManager.removeChrome(actor);
+            actor.destroy();
+        });
     }
 }
 
-// A secondary click from touch, for all apps. It works in the compositor because few Wayland apps
-// have their own long press, and none has a two finger tap.
+// Touch rules for all apps. They work in the compositor because few Wayland apps have their own
+// long press, and none has a two finger tap. A gesture ends the touch of the client.
 const LONG_PRESS_MS = 450; // before the 500 ms timers of GTK and Chromium
 const TWO_FINGER_TAP_MS = 350;
 const TOUCH_SLOP = 16;
-const BOTTOM_EDGE = 24; // EdgeDragAction starts here
+const GRAB_SLOP = 4; // before the 8 px at which GTK starts its own title bar drag
+const SCREEN_EDGE = 24; // EdgeDragAction starts here
 const CLICK_STEP_MS = 30;
 
 function inAppWindow(event) {
@@ -168,8 +272,9 @@ function inAppWindow(event) {
     return false;
 }
 
-class TouchSecondary {
-    constructor() {
+class TouchGestures {
+    constructor(handles) {
+        this._handles = handles;
         const seat = Clutter.get_default_backend().get_default_seat();
         this._pointer = seat.create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
         // Mutter has no API to cancel touch points. It sends wl_touch.cancel when a stage gesture
@@ -189,6 +294,15 @@ class TouchSecondary {
     _allowed() {
         return this._inApp && !Main.overview.visible && !Main.sessionMode.isLocked &&
             Main.modalCount === 0;
+    }
+
+    _zoneFor(event, x, y) {
+        const actor = global.stage.get_event_actor(event);
+        if (Main.overview.visible || Main.sessionMode.isLocked || Main.modalCount > 0 ||
+            !actor || !global.window_group.contains(actor) ||
+            y > global.stage.height - SCREEN_EDGE)
+            return null;
+        return this._handles.zoneAt(x, y);
     }
 
     _later(ms, callback) {
@@ -218,6 +332,8 @@ class TouchSecondary {
             this._later(CLICK_STEP_MS, () => {
                 this._pointer.notify_button(Clutter.CURRENT_TIME, Clutter.BUTTON_SECONDARY,
                     Clutter.ButtonState.RELEASED);
+                // A touch user has no use for the arrow
+                Meta.CursorTracker.get_for_display(global.display).set_pointer_visible(false);
             });
         });
     }
@@ -243,20 +359,27 @@ class TouchSecondary {
         const now = GLib.get_monotonic_time() / 1000;
 
         if (type === Clutter.EventType.TOUCH_BEGIN) {
+            // A window drag of the client takes the touch and the end never arrives here
+            if (this._touches.has(slot))
+                this._touches.clear();
             if (this._touches.size === 0) {
                 this._start = now;
                 this._inApp = inAppWindow(event);
                 this._pendingClick = null;
                 this._tapOk = true;
                 this._peak = 0;
+                this._grabbing = false;
+                this._zone = this._zoneFor(event, x, y);
             }
             this._touches.set(slot, {x, y, startX: x, startY: y});
             this._peak = Math.max(this._peak, this._touches.size);
             if (this._touches.size === 1) {
-                if (this._allowed() && y < global.stage.height - BOTTOM_EDGE)
+                if (this._allowed() && !this._zone && y > SCREEN_EDGE &&
+                    y < global.stage.height - SCREEN_EDGE)
                     this._timer = this._later(LONG_PRESS_MS, () => this._onLongPress());
             } else {
                 this._clearTimer();
+                this._zone = null;
                 if (this._touches.size > 2 || now - this._start > TWO_FINGER_TAP_MS)
                     this._tapOk = false;
                 const [a, b] = this._touches.values();
@@ -271,8 +394,15 @@ class TouchSecondary {
         if (type === Clutter.EventType.TOUCH_UPDATE) {
             touch.x = x;
             touch.y = y;
-            if (Math.abs(x - touch.startX) > TOUCH_SLOP ||
-                Math.abs(y - touch.startY) > TOUCH_SLOP) {
+            const moved = Math.max(Math.abs(x - touch.startX), Math.abs(y - touch.startY));
+            if (this._grabbing) {
+                this._handles.update(x, y);
+            } else if (this._zone && moved > GRAB_SLOP) {
+                this._tapOk = false;
+                this._grabbing = true;
+                this._canceller.emit('gesture-begin', global.stage);
+                this._handles.begin(this._zone, touch.startX, touch.startY);
+            } else if (moved > TOUCH_SLOP) {
                 this._clearTimer();
                 this._tapOk = false;
             }
@@ -281,6 +411,11 @@ class TouchSecondary {
 
         this._touches.delete(slot);
         this._clearTimer();
+        if (this._grabbing) {
+            this._grabbing = false;
+            this._handles.end(x, y);
+            return;
+        }
         if (type === Clutter.EventType.TOUCH_CANCEL)
             this._tapOk = false;
         if (this._touches.size > 0 || !this._allowed())
@@ -409,6 +544,22 @@ export default class TabletGestures {
         });
     }
 
+    _onTopSwipe(action) {
+        const [x] = action.get_press_coords(0);
+        const monitor = Main.layoutManager.primaryMonitor;
+        const part = (x - monitor.x) / monitor.width;
+        const {quickSettings, dateMenu} = Main.panel.statusArea;
+        if (part > 2 / 3) {
+            quickSettings.menu.open(BoxPointer.PopupAnimation.FULL);
+        } else if (part > 1 / 3) {
+            dateMenu.menu.open(BoxPointer.PopupAnimation.FULL);
+        } else {
+            const win = global.display.focus_window;
+            if (win?.is_fullscreen())
+                win.unmake_fullscreen();
+        }
+    }
+
     _onWindowCreated(win) {
         if (win.window_type !== Meta.WindowType.NORMAL || !win.can_maximize())
             return;
@@ -446,8 +597,8 @@ export default class TabletGestures {
             });
         }
 
-        this._handle = new ResizeHandle();
-        this._secondary = new TouchSecondary();
+        this._handles = new WindowHandles();
+        this._gestures = new TouchGestures(this._handles);
         this._windowId = global.display.connect('window-created',
             (_d, win) => this._onWindowCreated(win));
         this._night = new NightEffect();
@@ -467,6 +618,14 @@ export default class TabletGestures {
         this._action.connect('activated', () => Main.overview.toggle());
         global.stage.add_action_full('gta4xl-overview', Clutter.EventPhase.CAPTURE, this._action);
 
+        // GNOME leaves full screen on a swipe from any point of the top edge. That would fire
+        // together with the panels, so the left part of this action does its work.
+        this._unfullscreen = global.stage.get_action('unfullscreen');
+        global.stage.remove_action_by_name('unfullscreen');
+        this._topAction = new EdgeDragAction.EdgeDragAction(St.Side.TOP, modes);
+        this._topAction.connect('activated', action => this._onTopSwipe(action));
+        global.stage.add_action_full('gta4xl-top', Clutter.EventPhase.CAPTURE, this._topAction);
+
         this._seat = Clutter.get_default_backend().get_default_seat();
         this._seatIds = ['device-added', 'device-removed']
             .map(signal => this._seat.connect(signal, () => this._queueSyncOsk()));
@@ -479,10 +638,10 @@ export default class TabletGestures {
         UnlockDialog.UnlockDialog.prototype._ensureAuthPrompt = this._ensureAuthPrompt;
         Keyboard.Keyboard.prototype.open = this._keyboardOpen;
         global.display.disconnect(this._windowId);
-        this._handle.destroy();
-        this._handle = null;
-        this._secondary.destroy();
-        this._secondary = null;
+        this._gestures.destroy();
+        this._gestures = null;
+        this._handles.destroy();
+        this._handles = null;
         this._seatIds.forEach(id => this._seat.disconnect(id));
         this._seat = null;
         Main.extensionManager.disconnect(this._extensionId);
@@ -498,6 +657,10 @@ export default class TabletGestures {
 
         global.stage.remove_action_by_name('gta4xl-overview');
         this._action = null;
+        global.stage.remove_action_by_name('gta4xl-top');
+        this._topAction = null;
+        global.stage.add_action_full('unfullscreen', Clutter.EventPhase.CAPTURE,
+            this._unfullscreen);
         if (this._osk)
             global.stage.add_action_full('osk', Clutter.EventPhase.CAPTURE, this._osk);
         this._osk = null;

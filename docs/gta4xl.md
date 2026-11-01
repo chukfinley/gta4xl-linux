@@ -97,6 +97,9 @@ The LineageOS recovery entry "Reboot to bootloader" is a fastbootd that accepts 
 - `tools/tab CMD`: root shell on the tablet over Tailscale, host name `gta4xl`.
 - `tools/tab-shot`: DRM framebuffer to `_scratch/screen.png`, works under Wayland.
 - `tools/tab-tap.py X Y`: inject a touch tap into `/dev/input/event1`.
+- `tools/tab-touch.py`: hold, two finger tap, drag, pinch and three finger swipe. Copy it to
+  `/usr/local/bin/tab-touch`. Coordinates are panel pixels, in portrait. At rotation 3, a logical
+  point (x, y) is the panel pixel (1200 - 1.498 y, 1.498 x).
 - `tools/tty-run.py`, `tools/tty-push.py`: command and file over the USB serial console.
   ModemManager holds ttyACM0 for some seconds after each USB connect.
 
@@ -109,7 +112,12 @@ The LineageOS recovery entry "Reboot to bootloader" is a fastbootd that accepts 
   the backlight. `gta4xl-powerkey` grabs the touchscreen while the panel is off, because mutter
   wakes on any input.
 - Night Light: DECON has no gamma LUT here (no DQE driver in dpu20). The extension
-  `gta4xl-tablet` applies a colour shader on `uiGroup`, driven by gsd-color.
+  `gta4xl-tablet` applies a colour shader on `uiGroup`, driven by gsd-color. Settings reads the
+  mutter property `NightLightSupported`, and mutter sets it only for a CRTC with `GAMMA_LUT_SIZE`
+  above 0. So `decon_kms.c` offers a LUT of 256 entries and ignores it. A commit with only
+  `GAMMA_LUT` still sends its event, because the simple pipe adds the plane to each CRTC commit.
+  Test on 2026-11-01: 3000 K gave green x 0.69 and blue x 0.43 in the framebuffer, which is the
+  shader value once. Six LUT changes in a row gave no `flip_done` timeout.
 - Pen: libinput ignores a tablet without a resolution. `61-gta4xl.hwdb` sets 100 units per mm.
 - Battery: the driver reports mA, the power supply class needs uA. UPower had rate 0 and no
   time estimate. `sec_battery.c` multiplies by 1000.
@@ -308,11 +316,35 @@ A test module that calls kernel functions by kallsyms name needs care here: the 
 of 2026-11-01 each caused a panic and a restart before the cause was clear. Panic text:
 `/proc/last_kmsg`.
 
+## Bluetooth audio
+
+Open: the CMF Buds 2 Plus end each link 1.6 to 10 s after it starts, with HCI reason 0x13 (remote
+user). Bead android-linux-tf8 has the state. The trace shows no error on the tablet side:
+- With HFP: SLC setup completes (`AT+BRSF` to `AT+BIEV`), A2DP SBC is open, 0.9 s later the buds
+  end the link. "Unable to get io data" in the bluetoothd log comes after that, it is no cause.
+- Without HFP: AVDTP and AVRCP complete, the buds read our SDP records, 0.7 s later they end the
+  link. So HFP is no cause.
+- One link that the buds started themselves stayed 10 s and the sink came up. The tablet has no
+  kernel change in Bluetooth since the night it worked. Page timeouts come for 20 min at a time.
+- The likely cause is on the side of the buds: the two places of Dual Connection are in use by
+  other devices. This is not proven.
+
+HFP is off (`51-gta4xl.lua`). WirePlumber 0.4 reads those two keys, the adapter then has no
+Handsfree UUID. HFP has no use here: `SCO MTU 0:0` and no microphone. The node priority 2000 makes
+Bluetooth the default sink when it connects, the speaker has 800. A saved default sink would pin the
+speaker, so `tune.sh` removes `default-nodes`.
+
+Trace method: `btmon -w FILE`, then `btmon -T -r FILE`. A text pipe loses the end when btmon stops.
+
+Deep sleep ends all Bluetooth links. The Targus connects again at the next key press.
+
 ## Video
 
 - `h264_v4l2m2m` did not hang in the MFC. ffmpeg scans all `/dev/video*`, and the fimc-is stubs
   return 0 with no format for each index, so the loop did not end. `v4l2-ioctl.c` now returns
   EINVAL. This also stopped most `v4l_enum_fmt` warnings. ffmpeg now fails after 0.3 s.
+- Brave on YouTube: no h264ify. It would need a Web Store extension, the gain is small and
+  software decode already handles 1080p.
 - The MFC firmware (v12.2) loads, but ffmpeg cannot use the driver. `mfc_dec_reqbufs` refuses
   V4L2_MEMORY_MMAP, and VIDIOC_SUBSCRIBE_EVENT does not exist. The driver expects DMABUF from
   ION and the flow of the Samsung HAL. This is a large job, so it stops here.
@@ -333,10 +365,80 @@ of 2026-11-01 each caused a panic and a restart before the cause was clear. Pani
 - `tools/deploy-kernel.sh` now does the writes in a unit on the tablet. A lost SSH session in the
   middle of dd would leave a broken boot partition.
 
+## Touch and windows
+
+All of this is in the extension `gta4xl-tablet`, except the on-screen keyboard.
+
+Swipes:
+- Bottom edge: overview.
+- Top edge, by start position: right third quick settings, middle third calendar and
+  notifications, left third leaves full screen. This works in full screen and in all rotations.
+  GNOME has the action `unfullscreen` on the same gesture, and it fires from all of the edge. So
+  the extension removes that action and does its work in the left third.
+- `EdgeDragAction` emits `activated` when the finger goes up, so the menus do not fight the grab.
+
+Window grabbers, from iPadOS: a thin arc at the bottom right corner and a bar at the top centre.
+- They draw only. A tap in the zone still reaches the app. A drag of more than 4 px takes the touch.
+  GTK starts its title bar drag at 8 px, and then a mutter grab takes all touch events, so the
+  extension must act first. The end of such a client drag never arrives: `TOUCH_BEGIN` on a used
+  slot resets the state.
+- Corner drag: an outline and the arc follow the finger in the compositor. The client gets one
+  resize at the end. A maximized window leaves that state at the end of the drag.
+- Bar drag: moves the window, which stays on the screen. Drop at the left or right edge fills that
+  half, drop at the top maximizes. A preview shows the target. A drag from a half restores the size.
+- A half in portrait is 400 px. Brave has a larger minimum width and does not snap there.
+
+Frame time, stage `after-paint` intervals during a drag, 2026-11-01:
+
+| Drag | Input | p50 | p95 | max |
+|---|---|---|---|---|
+| Corner, client resize at 30 Hz, Text Editor | 13 Hz | 165 ms | 173 ms | 219 ms |
+| Corner, outline, Electron window | 120 Hz | 17.7 ms | 27.9 ms | 55 ms |
+| Bar, move, Electron window | 120 Hz | 16.6 ms | 26.7 ms | 47 ms |
+
+Secondary click (touch points cancel with `wl_touch.cancel`, then a virtual pointer clicks):
+- Long press: 450 ms, before the 500 ms timers of GTK and Chromium. The click comes when the finger
+  goes up. With a finger down mutter drops the pointer focus and the press is lost.
+- Two finger tap: both fingers down and up in 350 ms, click at the middle.
+- Mutter has no API to cancel touch points. It sends the cancel when a stage gesture begins. So a
+  `Clutter.GestureAction` with 9 points, which Clutter never starts, emits `gesture-begin`.
+- Brave needs no flag. Result on an image: `touchcancel`, `mousedown` button 2, `contextmenu`, no
+  `dragstart`, and the menu has "Bild speichern unter".
+- Drag, pinch, three finger swipe and the edge swipes give no click.
+
+Test without hands in the live session is a risk, a touch reaches what is open. A separate shell is
+safe: a new `HOME`, `dbus-run-session`, `gnome-shell --headless --unsafe-mode --virtual-monitor
+1200x2000 --wayland --no-x11 --wayland-display wl-hs`. Use `busctl call ... Eval` with a virtual
+touchscreen and `WAYLAND_DEBUG=1` on a client. Eval needs
+`import("resource:///org/gnome/shell/ui/main.js")`, `imports.ui.main` fails. Input there is slow,
+events arrive in batches of about 1 s, so timing tests belong on the hardware.
+
+New extension code needs a new session. Use `systemctl restart gdm`, this logs in again.
+
+On-screen keyboard: GJS OSK, `tools/tablet/osk-setup.sh`, settings in
+`/etc/dconf/db/local.d/51-gta4xl-osk`.
+- The zip has private file modes and no compiled schema, both stop the extension.
+- It has no rule for a physical keyboard. Its setting "never" still opens it for a touch on a shell
+  text field. So `gta4xl-tablet` turns the extension off while an external keyboard is connected.
+  `gpio_keys`, the touchscreen, the headset jack and BlueZ `(AVRCP)` devices do not count.
+- It opens on any touch while a text field has focus.
+- It runs only in the user session, so the lock screen keeps the PIN pad.
+
+Targus keyboard: `61-gta4xl.hwdb` maps Caps Lock to Super for this keyboard. The HID report offers
+Super on all keyboards, so the input capabilities do not show if the key exists.
+
+A shell crash: `org.gnome.Shell-disable-extensions.service` sets `disable-user-extensions`, this
+stays after a new login, and the PIN pad and all gestures are gone. The unit is masked. Reset with
+`gsettings set org.gnome.shell disable-user-extensions false`.
+
+Known crash: mutter 46.2 ends with SIGSEGV when a Wayland client dies with an open menu. It occurs
+with a normal mouse and with both extensions off. Close the menu first. See bead android-linux-8iv.
+
 ## Access and security
 
-- sshd takes keys only and accepts connections from 100.64.0.0/10 only. Tailscale SSH is off, the
-  default tailnet policy asks for an interactive check. Serial console has no auto login.
+- sshd accepts connections from 100.64.0.0/10 only. `user` logs in with the password, root with a
+  key only. Tailscale SSH is off, the default tailnet policy asks for an interactive check. Serial
+  console has no auto login.
 - The session starts with auto login and locks at once. The PIN pad of the extension sends the
   digits to the normal password prompt. Default PIN: `1234`, the password of `user`.
 - The disk is not encrypted and the bootloader is unlocked: physical access gives access to data.

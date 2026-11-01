@@ -15,10 +15,18 @@
 .keyboard-key.default-key { background-color: #6b6b70; }
 .ws-tmb:active, .workspace-thumbnail-indicator { border-color: #d0d0d4; }
 
-.gta4xl-resize-handle {
-    background-color: rgba(60, 60, 64, 0.85);
-    border-radius: 36px;
-    color: #ffffff;
+.gta4xl-window-bar {
+    width: 44px;
+    height: 5px;
+    border-radius: 3px;
+    background-color: rgba(255, 255, 255, 0.85);
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.4);
+}
+
+.gta4xl-snap-preview {
+    border-radius: 14px;
+    background-color: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.4);
 }
 
 .gta4xl-pin-pad { padding-top: 14px; }
