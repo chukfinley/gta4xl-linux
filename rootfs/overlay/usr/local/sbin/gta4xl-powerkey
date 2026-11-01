@@ -12,9 +12,11 @@ then the panel goes on. Power is a wake key, its press also arrives as an input 
 """
 import fcntl
 import glob
+import json
 import os
 import select
 import signal
+import socket
 import struct
 import subprocess
 import time
@@ -93,6 +95,18 @@ def set_panel(target, touch, on):
         pass  # It already has this state: the panel also goes off through GNOME
 
 
+def lock_session():
+    if not wayfire():
+        subprocess.run(["loginctl", "lock-sessions"])
+        return
+    data = json.dumps({"method": "tablet/lock", "data": {}}).encode()
+    for path in glob.glob("/run/user/1000/wayfire-session.socket"):
+        with socket.socket(socket.AF_UNIX) as sock:
+            sock.connect(path)
+            sock.sendall(struct.pack("<I", len(data)) + data)
+            sock.recv(64)
+
+
 def audio_active():
     return "[active]" in run_as("user", ["wpctl", "status"], XDG_RUNTIME_DIR="/run/user/1000")
 
@@ -142,7 +156,7 @@ def main():
                     pressed = time.monotonic()
                 elif value == 0 and was_on is not None:
                     if time.monotonic() - pressed >= LOCK_HOLD:
-                        subprocess.run(["loginctl", "lock-sessions"])
+                        lock_session()
                         was_on = None
                         continue
                     # On release: mutter also wakes on the release, after the panel went off

@@ -11,6 +11,8 @@ set -a
 set +a
 # Big core preference, see tablet-sched: it was the second largest gain during input
 echo $$ > /dev/stune/top-app/cgroup.procs 2>/dev/null
+# A private path: a test instance of Wayfire binds and unlinks /tmp/wayfire-<display>.socket
+export _WAYFIRE_SOCKET="$XDG_RUNTIME_DIR/wayfire-session.socket"
 PREFIX=/opt/wayfire
 # Keep the logs of the last sessions, a crash trace is at the end of its log
 LOGS="$HOME/.cache/tablet-desktop"
