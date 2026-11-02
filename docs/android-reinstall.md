@@ -24,3 +24,10 @@ Files on the PC: `/mnt/data/android-linux/tools/lineage/new/` (LineageOS zip, re
 If the tablet stops in download mode: flash recovery and vbmeta with `heimdall flash --RECOVERY recovery.img --VBMETA vbmeta.img`.
 
 To go back to Linux: see `README.md` and `tools/flash-linux.sh`.
+
+## Done on 2026-11-02
+
+- LineageOS 23.2 (20261028), no Google apps. Root with Magisk 31.1.
+- Magisk boot: patched on the device with `boot_patch.sh` from the APK. The Samsung bootloader checks the boot hash also when unlocked: make a new vbmeta with `tools/mk-vbmeta.py <lineage vbmeta> <out> boot=<magisk boot> dtbo=<dtbo>` and write both, or the tablet stops in download mode.
+- From a dead Linux initramfs (black screen, no rootfs): push a small static tool that calls `reboot(RESTART2, "recovery")` over the serial console, see `/mnt/data/android-linux/tmp/rr/tiny.c`. busybox `reboot` takes no argument.
+- Apps: Tailscale, F-Droid, Termux, Brave, Signal (APKs in `/mnt/data/android-linux/tools/lineage/apks`). Root SSH: `tools/android/rootssh`.

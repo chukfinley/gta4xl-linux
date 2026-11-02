@@ -1,0 +1,6 @@
+id=rootssh
+name=Root SSH (dropbear)
+version=1
+versionCode=1
+author=gta4xl
+description=dropbear SSH server as root on port 22, keys only
