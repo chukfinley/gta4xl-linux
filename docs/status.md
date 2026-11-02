@@ -19,11 +19,11 @@ Date of this state: 2026-11-01, 22:50. Update this file at each milestone.
 
 ## Apps
 
-Installed: Brave, YouTube web app, T3 Code, Zed (GPU), Terminal, Thunderbird with calendar, Signal, Jellyfin, 0 A.D., Krita, GIMP, Inkscape, MyPaint, Xournal++, Rnote, Drawing, Audacity, Shotcut, the Craft apps, ArtCraft native client, notebookllm, Akku-Statistik.
+Installed on the device (user choice, 2026-11-02): Brave, Alacritty, 0 A.D., T3 Code, Zed (GPU), Signal, Files (Nautilus), Einstellungen, Akku-Statistik. Calculator, PDF viewer, image viewer, archive tool and text editor stay installed for file types, but are hidden in the launcher.
 
-Removed: Waydroid, Spotify (optional with `WITH_SPOTIFY=1`), Kdenlive, GNOME Shell, gdm, GNOME Settings, web apps for Claude, Bitwarden and T3 Chat.
+Removed: Krita, GIMP, Inkscape, MyPaint, Xournal++, Rnote, Drawing, Audacity, Shotcut, the Craft apps, notebookllm, Thunderbird and its calendar, Jellyfin, Mattermost, RustDesk, Celluloid, mpv, GNOME Maps, Weather, Clocks, Sound Recorder, Characters, Fonts, Logs, Disk Usage, Disks, btop, htop, YouTube web app, Recommended Apps, Waydroid, Spotify, Kdenlive. The scripts in tools/tablet can still install them.
 
-User login steps are open for Signal, Jellyfin, Thunderbird and the Nextcloud calendar.
+The device is used mainly as a remote machine for T3 Code, with a keyboard.
 
 ## Desktop
 
