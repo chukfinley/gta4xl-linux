@@ -254,3 +254,12 @@ All three apps start without a crash.
 4. microG: open "microG Settings" and add the Google account ("Accounts"), if you want to log in to YouTube.
 5. YouTube: tap "Reject all" on the cookie dialog.
 6. Aurora Store: open it once and select the anonymous login.
+
+## Extra apps (2026-11-02)
+
+- Vielstimmig: own build `~/git/vielstimmig-app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk` (local key, not the Play build).
+- Chuk Chat: GitHub release `v1.0.113-pre.2` of `chuk-development/chuk_chat`, arm64 APK.
+- Bitwarden: `com.x8bit.bitwarden-fdroid.apk` from the GitHub releases of `bitwarden/android`.
+- Grok (`ai.x.grok`), Whoop (`com.whoop.android`), Plane (`com.plane.so`): XAPK from APKPure with `apkmirror-dl`. Install with `adb install-multiple -r <dir>/*.apk`. A selection of splits gives `INSTALL_FAILED_MISSING_SPLIT`. These XAPKs bring only `armeabi_v7a` splits, so the apps run as 32-bit.
+
+Files: `/mnt/data/android-linux/tools/lineage/apks/own` and `.../more`.
